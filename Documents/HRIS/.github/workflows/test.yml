@@ -1,0 +1,92 @@
+name: Tests
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  PNPM_VERSION: 8
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: lumion_hris_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Setup database
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/lumion_hris_test
+        run: |
+          cd packages/database
+          pnpm exec prisma migrate deploy
+
+      - name: Type check
+        run: pnpm type-check
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Test API
+        run: pnpm --filter @lumion/api test
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/lumion_hris_test
+          JWT_SECRET: test-secret
+          FRONTEND_URL: http://localhost:3000
+
+      - name: Test Frontend
+        run: pnpm --filter @lumion/web test
+        env:
+          NEXTAUTH_URL: http://localhost:3000
+          NEXTAUTH_SECRET: test-secret
+          NEXT_PUBLIC_API_URL: http://localhost:3001
+
+      - name: Build API
+        run: pnpm --filter @lumion/api build
+
+      - name: Build Frontend
+        run: pnpm --filter @lumion/web build
+        env:
+          NEXTAUTH_URL: https://app.example.com
+          NEXT_PUBLIC_API_URL: https://api.example.com

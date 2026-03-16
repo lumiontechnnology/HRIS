@@ -1,0 +1,9 @@
+{
+  "name": "@lumion/config",
+  "version": "1.0.0",
+  "description": "Shared configuration for Lumion HRIS",
+  "files": ["eslint-preset.js", "prettier.config.js", "typescript.js"],
+  "scripts": {
+    "build": "echo 'No build needed for config package'"
+  }
+}
