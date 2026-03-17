@@ -63,7 +63,7 @@ export default function AttendanceReportsPage(): JSX.Element {
     enabled: !!user,
   });
 
-  const employees = data?.data || [];
+  const employees: EmployeeReport[] = data?.data || [];
   const summary = data?.summary;
 
   // Prepare chart data
