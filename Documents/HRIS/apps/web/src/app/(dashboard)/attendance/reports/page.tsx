@@ -102,7 +102,7 @@ export default function AttendanceReportsPage(): JSX.Element {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-4">
-        <Link href="/dashboard/attendance">
+        <Link href="/attendance">
           <Button variant="outline" size="sm">
             <ArrowLeft className="h-4 w-4" />
           </Button>

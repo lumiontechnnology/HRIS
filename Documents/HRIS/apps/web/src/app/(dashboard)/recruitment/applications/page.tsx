@@ -134,7 +134,7 @@ export default function ApplicationsPage(): JSX.Element {
                         {app.candidateName}
                       </h3>
                       <Link
-                        href={`/dashboard/recruitment/jobs/${app.job.id}`}
+                        href={`/recruitment/jobs/${app.job.id}`}
                         className="text-sm text-indigo-600 hover:underline dark:text-indigo-400"
                       >
                         {app.job.title}

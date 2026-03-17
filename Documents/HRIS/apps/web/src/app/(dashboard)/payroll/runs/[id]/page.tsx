@@ -156,7 +156,7 @@ export default function PayrollRunDetailPage(): JSX.Element {
   if (error || !data?.data) {
     return (
       <div className="space-y-6">
-        <Link href="/dashboard/payroll/runs">
+        <Link href="/payroll/runs">
           <Button variant="outline">
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back
@@ -182,7 +182,7 @@ export default function PayrollRunDetailPage(): JSX.Element {
   return (
     <div className="space-y-6">
       {/* Back Button */}
-      <Link href="/dashboard/payroll/runs">
+      <Link href="/payroll/runs">
         <Button variant="outline">
           <ArrowLeft className="mr-2 h-4 w-4" />
           Back
@@ -347,7 +347,7 @@ export default function PayrollRunDetailPage(): JSX.Element {
                         </span>
                       </td>
                       <td className="py-3 text-center">
-                        <Link href={`/dashboard/payroll/payslips/${slip.id}`}>
+                        <Link href={`/payroll/payslips/${slip.id}`}>
                           <Button variant="ghost" size="sm">
                             <Download className="h-4 w-4" />
                           </Button>

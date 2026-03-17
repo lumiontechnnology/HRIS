@@ -63,7 +63,7 @@ export default function PayslipsPage(): JSX.Element {
             View and download employee payslips.
           </p>
         </div>
-        <Link href="/dashboard/payroll/runs">
+        <Link href="/payroll/runs">
           <Button variant="outline">
             <DollarSign className="mr-2 h-4 w-4" />
             Payroll Runs
@@ -108,7 +108,7 @@ export default function PayslipsPage(): JSX.Element {
                       >
                         <td className="py-3">
                           <Link
-                            href={`/dashboard/payroll/payslips/${slip.id}`}
+                            href={`/payroll/payslips/${slip.id}`}
                             className="font-medium text-indigo-600 hover:underline dark:text-indigo-400"
                           >
                             {slip.employee.firstName} {slip.employee.lastName}
@@ -135,7 +135,7 @@ export default function PayslipsPage(): JSX.Element {
                           </span>
                         </td>
                         <td className="py-3">
-                          <Link href={`/dashboard/payroll/payslips/${slip.id}`}>
+                          <Link href={`/payroll/payslips/${slip.id}`}>
                             <Button variant="ghost" size="sm">
                               <File className="h-4 w-4" />
                             </Button>

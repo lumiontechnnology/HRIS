@@ -89,6 +89,7 @@ export async function POST(request: Request) {
         data: {
           tenantId: tenant.id,
           title: position,
+          code: position.substring(0, 3).toUpperCase(),
           description: position,
         },
       });

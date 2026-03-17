@@ -76,7 +76,7 @@ export default function NewPayrollRunPage(): JSX.Element {
         description: 'Payroll run created successfully',
       });
 
-      router.push(`/dashboard/payroll/runs/${result.data.id}`);
+      router.push(`/payroll/runs/${result.data.id}`);
     } catch (error) {
       toast({
         title: 'Error',

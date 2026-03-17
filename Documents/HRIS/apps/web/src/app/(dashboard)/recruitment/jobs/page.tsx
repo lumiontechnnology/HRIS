@@ -73,7 +73,7 @@ export default function JobsPage(): JSX.Element {
             Manage job requisitions and openings.
           </p>
         </div>
-        <Link href="/dashboard/recruitment/jobs/new">
+        <Link href="/recruitment/jobs/new">
           <Button>
             <Plus className="mr-2 h-4 w-4" />
             Post Job
@@ -129,7 +129,7 @@ export default function JobsPage(): JSX.Element {
                   <CardHeader>
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
-                        <Link href={`/dashboard/recruitment/jobs/${job.id}`}>
+                        <Link href={`/recruitment/jobs/${job.id}`}>
                           <h3 className="font-semibold text-indigo-600 hover:underline dark:text-indigo-400">
                             {job.title}
                           </h3>
@@ -177,7 +177,7 @@ export default function JobsPage(): JSX.Element {
                       </div>
                     </div>
 
-                    <Link href={`/dashboard/recruitment/jobs/${job.id}`}>
+                    <Link href={`/recruitment/jobs/${job.id}`}>
                       <Button variant="outline" className="w-full">
                         View Details
                         <ArrowUpRight className="ml-2 h-4 w-4" />

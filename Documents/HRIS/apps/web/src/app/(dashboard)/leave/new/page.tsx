@@ -142,7 +142,7 @@ export default function NewLeaveRequestPage(): JSX.Element {
         description: 'Leave request submitted for approval',
       });
 
-      router.push('/dashboard/leave');
+      router.push('/leave');
     } catch (error) {
       toast({
         title: 'Error',

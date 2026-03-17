@@ -77,13 +77,13 @@ export default function LeaveRequestsPage(): JSX.Element {
           </p>
         </div>
         <div className="flex gap-2">
-          <Link href="/dashboard/leave/balance">
+          <Link href="/leave/balance">
             <Button variant="outline">
               <Calendar className="mr-2 h-4 w-4" />
               View Balance
             </Button>
           </Link>
-          <Link href="/dashboard/leave/new">
+          <Link href="/leave/new">
             <Button>
               <Plus className="mr-2 h-4 w-4" />
               Request Leave
@@ -201,7 +201,7 @@ export default function LeaveRequestsPage(): JSX.Element {
                           </p>
                         )}
                       </div>
-                      <Link href={`/dashboard/leave/${request.id}`}>
+                      <Link href={`/leave/${request.id}`}>
                         <Button variant="ghost" size="sm">
                           View
                         </Button>

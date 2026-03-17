@@ -4,6 +4,15 @@ import { useAuth, useUser } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
+interface CurrentUser {
+  id: string;
+  email: string | undefined;
+  firstName: string | null;
+  lastName: string | null;
+  imageUrl: string;
+  tenantId: string;
+}
+
 /**
  * Hook to require authentication in client components.
  * Automatically redirects to sign-in if not authenticated.
@@ -71,14 +80,22 @@ export function useCurrentUser() {
   const { isLoaded, isSignedIn } = useAuth();
   const { user } = useUser();
 
+  const tenantId =
+    (user?.publicMetadata?.tenantId as string | undefined) ||
+    (user?.unsafeMetadata?.tenantId as string | undefined) ||
+    '';
+
   return {
-    user: user ? {
-      id: user.id,
-      email: user.emailAddresses?.[0]?.emailAddress,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      imageUrl: user.imageUrl,
-    } : null,
+    user: user
+      ? ({
+          id: user.id,
+          email: user.emailAddresses?.[0]?.emailAddress,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          imageUrl: user.imageUrl,
+          tenantId,
+        } as CurrentUser)
+      : null,
     isLoading: !isLoaded,
     isAuthenticated: isSignedIn,
   };

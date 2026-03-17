@@ -169,13 +169,13 @@ export default function AttendancePage(): JSX.Element {
           </p>
         </div>
         <div className="flex gap-2">
-          <Link href="/dashboard/attendance/history">
+          <Link href="/attendance/history">
             <Button variant="outline">
               <Calendar className="mr-2 h-4 w-4" />
               History
             </Button>
           </Link>
-          <Link href="/dashboard/attendance/reports">
+          <Link href="/attendance/reports">
             <Button variant="outline">
               <Calendar className="mr-2 h-4 w-4" />
               Reports

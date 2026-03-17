@@ -65,7 +65,7 @@ export default function EmployeesPage(): JSX.Element {
             Manage and view all employees in your organization.
           </p>
         </div>
-        <Link href="/dashboard/employees/new">
+        <Link href="/employees/new">
           <Button>
             <Plus className="mr-2 h-4 w-4" />
             Add Employee
@@ -129,7 +129,7 @@ export default function EmployeesPage(): JSX.Element {
                       <td className="py-3">{employee.employeeId}</td>
                       <td className="py-3">
                         <Link
-                          href={`/dashboard/employees/${employee.id}`}
+                          href={`/employees/${employee.id}`}
                           className="font-medium text-indigo-600 hover:underline dark:text-indigo-400"
                         >
                           {employee.firstName} {employee.lastName}
@@ -144,7 +144,7 @@ export default function EmployeesPage(): JSX.Element {
                         </span>
                       </td>
                       <td className="py-3">
-                        <Link href={`/dashboard/employees/${employee.id}`}>
+                        <Link href={`/employees/${employee.id}`}>
                           <Button variant="ghost" size="sm">
                             View
                           </Button>

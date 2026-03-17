@@ -73,7 +73,7 @@ export default function PayrollRunsPage(): JSX.Element {
             Manage all payroll runs and salary cycles.
           </p>
         </div>
-        <Link href="/dashboard/payroll/runs/new">
+        <Link href="/payroll/runs/new">
           <Button>
             <Plus className="mr-2 h-4 w-4" />
             New Run
@@ -165,7 +165,7 @@ export default function PayrollRunsPage(): JSX.Element {
                           )}
                         </div>
                       </div>
-                      <Link href={`/dashboard/payroll/runs/${run.id}`}>
+                      <Link href={`/payroll/runs/${run.id}`}>
                         <Button variant="ghost" size="sm">
                           <ArrowUpRight className="h-4 w-4" />
                         </Button>

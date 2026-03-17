@@ -69,7 +69,7 @@ export default function PayslipDetailPage(): JSX.Element {
   if (error || !payslip) {
     return (
       <div className="space-y-6">
-        <Link href="/dashboard/payroll/payslips">
+        <Link href="/payroll/payslips">
           <Button variant="outline">
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back
@@ -89,7 +89,7 @@ export default function PayslipDetailPage(): JSX.Element {
   return (
     <div className="space-y-6">
       {/* Back Button */}
-      <Link href="/dashboard/payroll/payslips">
+      <Link href="/payroll/payslips">
         <Button variant="outline">
           <ArrowLeft className="mr-2 h-4 w-4" />
           Back

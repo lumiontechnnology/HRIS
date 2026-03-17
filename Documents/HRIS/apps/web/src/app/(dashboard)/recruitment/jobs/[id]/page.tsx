@@ -93,7 +93,7 @@ export default function JobDetailPage(): JSX.Element {
   if (!job) {
     return (
       <div className="space-y-6">
-        <Link href="/dashboard/recruitment/jobs">
+        <Link href="/recruitment/jobs">
           <Button variant="outline">
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back
@@ -126,7 +126,7 @@ export default function JobDetailPage(): JSX.Element {
   return (
     <div className="space-y-6">
       {/* Back Button */}
-      <Link href="/dashboard/recruitment/jobs">
+      <Link href="/recruitment/jobs">
         <Button variant="outline">
           <ArrowLeft className="mr-2 h-4 w-4" />
           Back
@@ -312,7 +312,7 @@ export default function JobDetailPage(): JSX.Element {
 
       {/* Quick Actions */}
       <div className="flex gap-4">
-        <Link href={`/dashboard/recruitment/applications?jobId=${job.id}`} className="flex-1">
+        <Link href={`/recruitment/applications?jobId=${job.id}`} className="flex-1">
           <Button variant="outline" className="w-full">
             <Users className="mr-2 h-4 w-4" />
             View All Applications

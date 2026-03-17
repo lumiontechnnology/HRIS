@@ -76,7 +76,7 @@ export default function OnboardingPage() {
   };
 
   const handleSkip = () => {
-    router.push('/dashboard');
+    router.push('/');
   };
 
   const progressPercentage = (step / 3) * 100;

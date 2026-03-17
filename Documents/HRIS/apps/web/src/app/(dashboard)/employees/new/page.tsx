@@ -62,7 +62,7 @@ export default function NewEmployeePage(): JSX.Element {
         description: 'Employee created successfully',
       });
 
-      router.push('/dashboard/employees');
+      router.push('/employees');
     } catch (error) {
       toast({
         title: 'Error',

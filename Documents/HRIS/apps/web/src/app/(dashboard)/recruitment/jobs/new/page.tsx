@@ -81,7 +81,7 @@ export default function NewJobPage(): JSX.Element {
         description: 'Job requisition posted successfully',
       });
 
-      router.push(`/dashboard/recruitment/jobs/${result.data.id}`);
+      router.push(`/recruitment/jobs/${result.data.id}`);
     } catch (error) {
       toast({
         title: 'Error',

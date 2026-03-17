@@ -50,13 +50,13 @@ export default function PayrollPage(): JSX.Element {
           </p>
         </div>
         <div className="flex gap-2">
-          <Link href="/dashboard/payroll/payslips">
+          <Link href="/payroll/payslips">
             <Button variant="outline">
               <FileText className="mr-2 h-4 w-4" />
               View Payslips
             </Button>
           </Link>
-          <Link href="/dashboard/payroll/runs/new">
+          <Link href="/payroll/runs/new">
             <Button>
               <Calendar className="mr-2 h-4 w-4" />
               New Payroll Run
@@ -137,7 +137,7 @@ export default function PayrollPage(): JSX.Element {
                   {summary.currentRunStatus === 'NO_RUN' ? 'No Active Run' : summary.currentRunStatus}
                 </span>
               </div>
-              <Link href="/dashboard/payroll/runs">
+              <Link href="/payroll/runs">
                 <Button variant="outline">View All Runs</Button>
               </Link>
             </div>
@@ -155,7 +155,7 @@ export default function PayrollPage(): JSX.Element {
             <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
               Quick access to recently generated payslips.
             </p>
-            <Link href="/dashboard/payroll/payslips">
+            <Link href="/payroll/payslips">
               <Button variant="outline" className="w-full">
                 Browse All Payslips
               </Button>
@@ -171,7 +171,7 @@ export default function PayrollPage(): JSX.Element {
             <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
               Manage all payroll runs and their status.
             </p>
-            <Link href="/dashboard/payroll/runs">
+            <Link href="/payroll/runs">
               <Button variant="outline" className="w-full">
                 View All Runs
               </Button>

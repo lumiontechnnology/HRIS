@@ -15,13 +15,13 @@ export function AuthHeader() {
         {!isSignedIn ? (
           <>
             <Link
-              href="/auth/sign-in"
+              href="/sign-in"
               className="px-4 py-2 text-sm font-medium text-slate-700 hover:text-slate-900 transition"
             >
               Sign in
             </Link>
             <Link
-              href="/auth/sign-up"
+              href="/sign-up"
               className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
             >
               Sign up

@@ -40,7 +40,7 @@ export default function RecruitmentPage(): JSX.Element {
             Manage job openings, applications, and interviews.
           </p>
         </div>
-        <Link href="/dashboard/recruitment/jobs/new">
+        <Link href="/recruitment/jobs/new">
           <Button>
             <Briefcase className="mr-2 h-4 w-4" />
             Post Job
@@ -153,7 +153,7 @@ export default function RecruitmentPage(): JSX.Element {
             <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
               Create and manage active job requisitions.
             </p>
-            <Link href="/dashboard/recruitment/jobs">
+            <Link href="/recruitment/jobs">
               <Button variant="outline" className="w-full">
                 View All Jobs
               </Button>
@@ -169,7 +169,7 @@ export default function RecruitmentPage(): JSX.Element {
             <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
               Review and manage candidate applications.
             </p>
-            <Link href="/dashboard/recruitment/applications">
+            <Link href="/recruitment/applications">
               <Button variant="outline" className="w-full">
                 View Pipeline
               </Button>
@@ -185,7 +185,7 @@ export default function RecruitmentPage(): JSX.Element {
             <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
               Schedule and track interview sessions.
             </p>
-            <Link href="/dashboard/recruitment/interviews">
+            <Link href="/recruitment/interviews">
               <Button variant="outline" className="w-full">
                 View Schedule
               </Button>
