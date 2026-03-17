@@ -3,14 +3,14 @@
  * Protects routes and ensures proper authentication
  */
 
-import { clerkMiddleware } from "@clerk/nextjs/server";
+import { clerkMiddleware } from "@clerk/nextjs";
 import { NextResponse } from "next/server";
 
 // All routes except public ones are protected
 export default clerkMiddleware((auth: any, req: any) => {
   if (!auth.userId && !isPublicRoute(req.nextUrl.pathname)) {
     // Redirect to sign in
-    const url = new URL("/auth/sign-in", req.url);
+    const url = new URL("/sign-in", req.url);
     url.searchParams.set("redirect_url", req.url);
     return NextResponse.redirect(url);
   }
@@ -21,16 +21,14 @@ export default clerkMiddleware((auth: any, req: any) => {
 function isPublicRoute(pathname: string): boolean {
   const publicRoutes = [
     "/",
-    "/auth/sign-in",
-    "/auth/sign-up",
-    "/auth/reset-password",
+    "/sign-in",
+    "/sign-up",
     "/api/health",
     "/api/webhooks/clerk",
   ];
 
   return (
     publicRoutes.includes(pathname) ||
-    pathname.startsWith("/auth/") ||
     pathname.startsWith("/api/webhooks/clerk")
   );
 }

@@ -1,6 +1,8 @@
 'use client';
 
+import { useClerk } from '@clerk/nextjs';
 import { useCurrentUser } from '@/lib/client-auth';
+import { cn } from '@/lib/utils';
 import {
   LayoutDashboard,
   Users,
@@ -21,26 +23,25 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { Button } from '@lumion/ui';
-import { signOut } from 'next-auth/react';
-import { cn } from '@lumion/ui';
 
 const navItems = [
-  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/dashboard/employees', label: 'Employees', icon: Users },
-  { href: '/dashboard/leave', label: 'Leave', icon: Calendar },
-  { href: '/dashboard/attendance', label: 'Attendance', icon: Clock },
-  { href: '/dashboard/payroll', label: 'Payroll', icon: DollarSign },
-  { href: '/dashboard/recruitment', label: 'Recruitment', icon: Briefcase },
-  { href: '/dashboard/performance', label: 'Performance', icon: Target },
-  { href: '/dashboard/training', label: 'Training', icon: BookOpen },
-  { href: '/dashboard/assets', label: 'Assets', icon: Package },
-  { href: '/dashboard/reports', label: 'Reports', icon: FileText },
+  { href: '/', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/employees', label: 'Employees', icon: Users },
+  { href: '/leave', label: 'Leave', icon: Calendar },
+  { href: '/attendance', label: 'Attendance', icon: Clock },
+  { href: '/payroll', label: 'Payroll', icon: DollarSign },
+  { href: '/recruitment', label: 'Recruitment', icon: Briefcase },
+  { href: '/performance', label: 'Performance', icon: Target },
+  { href: '/training', label: 'Training', icon: BookOpen },
+  { href: '/assets', label: 'Assets', icon: Package },
+  { href: '/reports', label: 'Reports', icon: FileText },
 ];
 
 export function Sidebar(): JSX.Element {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const { user } = useCurrentUser();
+  const { signOut } = useClerk();
 
   return (
     <>
@@ -106,7 +107,7 @@ export function Sidebar(): JSX.Element {
               Settings
             </Link>
             <button
-              onClick={() => signOut({ callbackUrl: '/login' })}
+              onClick={() => signOut({ redirectUrl: '/sign-in' })}
               className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
             >
               <LogOut className="h-5 w-5" />

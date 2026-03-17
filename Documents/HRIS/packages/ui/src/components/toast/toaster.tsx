@@ -1,12 +1,12 @@
 import * as React from "react"
-import { useToast } from "@/components/toast/use-toast"
+import { useToast } from "./use-toast"
 import {
   Toast,
   ToastClose,
   ToastDescription,
   ToastTitle,
   ToastViewport,
-} from "@/components/toast/toast"
+} from "./toast"
 
 export function Toaster(): JSX.Element {
   const { toasts } = useToast()

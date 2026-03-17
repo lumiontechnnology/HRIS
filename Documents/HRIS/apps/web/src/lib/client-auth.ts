@@ -1,45 +1,45 @@
 'use client';
 
-import { useSession } from 'next-auth/react';
+import { useAuth, useUser } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
 /**
  * Hook to require authentication in client components.
- * Automatically redirects to login if not authenticated.
+ * Automatically redirects to sign-in if not authenticated.
  */
 export function useRequireAuth() {
-  const { data: session, status } = useSession();
+  const { isLoaded, isSignedIn } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (status === 'unauthenticated') {
-      router.push('/login');
+    if (isLoaded && !isSignedIn) {
+      router.push('/sign-in');
     }
-  }, [status, router]);
+  }, [isLoaded, isSignedIn, router]);
 
-  return { session, status, isLoading: status === 'loading' };
+  return { isSignedIn, isLoading: !isLoaded };
 }
 
 /**
  * Hook to check if user has permission
  */
 export function usePermission() {
-  const { data: session } = useSession();
+  const { user } = useUser();
 
-  const hasPermission = (resource: string, action: string): boolean => {
-    if (!session?.user?.permissions) return false;
-    return session.user.permissions.includes(`${resource}:${action}`);
+  const hasPermission = (_resource: string, _action: string): boolean => {
+    // TODO: Implement permission checking with Clerk metadata or custom claims
+    return !!user;
   };
 
-  const hasAnyPermission = (permissions: string[]): boolean => {
-    if (!session?.user?.permissions) return false;
-    return permissions.some((p) => session.user.permissions.includes(p));
+  const hasAnyPermission = (_permissions: string[]): boolean => {
+    // TODO: Implement permission checking with Clerk metadata or custom claims
+    return !!user;
   };
 
-  const hasAllPermissions = (permissions: string[]): boolean => {
-    if (!session?.user?.permissions) return false;
-    return permissions.every((p) => session.user.permissions.includes(p));
+  const hasAllPermissions = (_permissions: string[]): boolean => {
+    // TODO: Implement permission checking with Clerk metadata or custom claims
+    return !!user;
   };
 
   return { hasPermission, hasAnyPermission, hasAllPermissions };
@@ -49,16 +49,16 @@ export function usePermission() {
  * Hook to check if user has role
  */
 export function useRole() {
-  const { data: session } = useSession();
+  const { user } = useUser();
 
-  const hasRole = (roles: string[]): boolean => {
-    if (!session?.user?.roles) return false;
-    return roles.some((role) => session.user.roles.includes(role));
+  const hasRole = (_roles: string[]): boolean => {
+    // TODO: Implement role checking with Clerk metadata or custom claims
+    return !!user;
   };
 
-  const hasAllRoles = (roles: string[]): boolean => {
-    if (!session?.user?.roles) return false;
-    return roles.every((role) => session.user.roles.includes(role));
+  const hasAllRoles = (_roles: string[]): boolean => {
+    // TODO: Implement role checking with Clerk metadata or custom claims
+    return !!user;
   };
 
   return { hasRole, hasAllRoles };
@@ -68,11 +68,18 @@ export function useRole() {
  * Hook to get current user
  */
 export function useCurrentUser() {
-  const { data: session, status } = useSession();
+  const { isLoaded, isSignedIn } = useAuth();
+  const { user } = useUser();
 
   return {
-    user: session?.user,
-    isLoading: status === 'loading',
-    isAuthenticated: status === 'authenticated',
+    user: user ? {
+      id: user.id,
+      email: user.emailAddresses?.[0]?.emailAddress,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      imageUrl: user.imageUrl,
+    } : null,
+    isLoading: !isLoaded,
+    isAuthenticated: isSignedIn,
   };
 }
