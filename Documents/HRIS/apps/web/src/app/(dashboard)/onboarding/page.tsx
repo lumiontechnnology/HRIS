@@ -17,6 +17,8 @@ export default function OnboardingPage() {
   const router = useRouter();
   const { user } = useCurrentUser();
   const [step, setStep] = useState(1);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [formData, setFormData] = useState<OnboardingData>({
     department: '',
     position: '',
@@ -45,9 +47,32 @@ export default function OnboardingPage() {
   };
 
   const handleComplete = async () => {
-    // TODO: Save onboarding data to database
-    console.log('Onboarding data:', formData);
-    router.push('/dashboard');
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      const response = await fetch('/api/onboarding', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to complete onboarding');
+      }
+
+      // Redirect to dashboard on success
+      router.push('/');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
+      console.error('Onboarding error:', err);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleSkip = () => {
@@ -82,6 +107,11 @@ export default function OnboardingPage() {
 
         {/* Card */}
         <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg p-8">
+          {error && (
+            <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+              <p className="text-sm text-red-700 dark:text-red-400">{error}</p>
+            </div>
+          )}
           {/* Step 1: Department & Position */}
           {step === 1 && (
             <div className="space-y-6">
@@ -192,7 +222,7 @@ export default function OnboardingPage() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm font-medium text-slate-600 dark:text-slate-400">Email:</span>
-                  <span className="text-sm font-semibold text-slate-900 dark:text-white">{user?.primaryEmailAddress?.emailAddress}</span>
+                  <span className="text-sm font-semibold text-slate-900 dark:text-white">{user?.email}</span>
                 </div>
                 <hr className="border-slate-200 dark:border-slate-600" />
                 <div className="flex justify-between">
@@ -240,9 +270,10 @@ export default function OnboardingPage() {
             {step === 3 && (
               <Button
                 onClick={handleComplete}
-                className="bg-green-600 hover:bg-green-700"
+                disabled={isLoading}
+                className="bg-green-600 hover:bg-green-700 disabled:bg-green-400"
               >
-                Complete Onboarding
+                {isLoading ? 'Completing...' : 'Complete Onboarding'}
               </Button>
             )}
           </div>
