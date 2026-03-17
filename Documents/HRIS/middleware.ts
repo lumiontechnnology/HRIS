@@ -3,22 +3,11 @@
  * Protects routes and ensures proper authentication
  */
 
-import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs";
+import { withClerkMiddleware } from "@clerk/nextjs";
 import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 
-const publicRoutes = createRouteMatcher([
-  "/",
-  "/sign-in",
-  "/sign-up",
-  "/api/health",
-  "/api/webhooks/clerk",
-]);
-
-export default clerkMiddleware((auth, req) => {
-  if (!publicRoutes(req) && !auth.userId) {
-    return NextResponse.redirect(new URL("/sign-in", req.url));
-  }
-
+export default withClerkMiddleware((req: NextRequest) => {
   return NextResponse.next();
 });
 
