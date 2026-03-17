@@ -11,8 +11,8 @@ export function AuthHeader() {
       <div className="flex gap-4">
         {!isSignedIn ? (
           <>
-            <SignInButton />
-            <SignUpButton />
+            <SignInButton mode="modal" />
+            <SignUpButton mode="modal" />
           </>
         ) : (
           <UserButton />
