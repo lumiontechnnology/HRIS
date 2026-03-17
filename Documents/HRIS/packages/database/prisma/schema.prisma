@@ -73,30 +73,15 @@ model Tenant {
 
 model User {
   id                    String   @id @default(cuid())
+  clerkUserId           String   @unique
   email                 String   @unique
-  password              String   // bcrypt hashed
   firstName             String
   lastName              String
   avatar                String?
   tenantId              String
   
-  // Email verification
-  emailVerified         DateTime?
-  emailVerificationToken String?
-  
-  // Password reset
-  passwordResetToken    String?
-  passwordResetExpires  DateTime?
-  
-  // MFA
-  mfaEnabled            Boolean  @default(false)
-  mfaSecret             String?
-  mfaBackupCodes        String[] // encrypted backup codes
-  
-  // Login tracking
+  // Login tracking (managed by Clerk but tracked locally)
   lastLogin             DateTime?
-  loginAttempts         Int      @default(0)
-  lockedUntil           DateTime?
   
   // Permissions
   isActive              Boolean  @default(true)
@@ -107,7 +92,6 @@ model User {
   employee              Employee? @relation(fields: [employeeId], references: [id], onDelete: SetNull)
   
   // Related models
-  createdBy             String?
   tenant                Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   auditLogs             AuditLog[]
   sessionLogs           SessionLog[]
@@ -119,6 +103,7 @@ model User {
   @@index([tenantId])
   @@index([email])
   @@index([employeeId])
+  @@index([clerkUserId])
 }
 
 model Role {
@@ -217,7 +202,7 @@ model Employee {
   managerId         String?
   
   // Compensation
-  salary            Decimal  @db.Numeric(12, 2)
+  salary            Decimal  @db.Decimal(12, 2)
   currency          String   @default("NGN")
   salaryFrequency   String   @default("MONTHLY") // DAILY, WEEKLY, BIWEEKLY, SEMI_MONTHLY, MONTHLY, QUARTERLY, ANNUAL
   
@@ -605,9 +590,9 @@ model Payslip {
   payrollRunId  String
   
   // Compensation
-  grossPay      Decimal  @db.Numeric(12, 2)
-  deductions    Decimal  @db.Numeric(12, 2)
-  netPay        Decimal  @db.Numeric(12, 2)
+  grossPay      Decimal  @db.Decimal(12, 2)
+  deductions    Decimal  @db.Decimal(12, 2)
+  netPay        Decimal  @db.Decimal(12, 2)
   currency      String   @default("NGN")
   
   // Details (JSON for flexibility)
@@ -644,8 +629,8 @@ model JobRequisition {
   departmentId    String?
   description     String
   requirements    String?
-  salary_min      Decimal? @db.Numeric(12, 2)
-  salary_max      Decimal? @db.Numeric(12, 2)
+  salary_min      Decimal? @db.Decimal(12, 2)
+  salary_max      Decimal? @db.Decimal(12, 2)
   currency        String   @default("NGN")
   status          String   @default("DRAFT") // DRAFT, APPROVED, PUBLISHED, CLOSED, ARCHIVED
   
@@ -676,7 +661,7 @@ model Application {
   status          String   @default("APPLIED") // APPLIED, SCREENING, PHONE_INTERVIEW, TECHNICAL_TEST, PANEL_INTERVIEW, OFFER, HIRED, REJECTED
   
   currentStage    String   @default("APPLIED")
-  currentScore    Decimal? @db.Numeric(5, 2)
+  currentScore    Decimal? @db.Decimal(5, 2)
   
   tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   jobRequisition  JobRequisition @relation(fields: [jobRequisitionId], references: [id], onDelete: Cascade)
@@ -699,7 +684,7 @@ model Interview {
   scheduledAt     DateTime
   completedAt     DateTime?
   notes           String?
-  score           Decimal? @db.Numeric(5, 2)
+  score           Decimal? @db.Decimal(5, 2)
   
   application     Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
   
@@ -792,7 +777,7 @@ model Training {
   startDate       DateTime
   endDate         DateTime?
   duration        Int?     // hours
-  cost            Decimal? @db.Numeric(12, 2)
+  cost            Decimal? @db.Decimal(12, 2)
   currency        String   @default("NGN")
   
   tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -807,14 +792,16 @@ model Training {
 
 model TrainingEnrollment {
   id              String   @id @default(cuid())
+  tenantId        String
   employeeId      String
   trainingId      String
   status          String   @default("ENROLLED") // ENROLLED, IN_PROGRESS, COMPLETED, DROPPED
   
   completedAt     DateTime?
   certificate     String?
-  assessmentScore Decimal? @db.Numeric(5, 2)
+  assessmentScore Decimal? @db.Decimal(5, 2)
   
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   employee        Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   training        Training @relation(fields: [trainingId], references: [id], onDelete: Cascade)
   
@@ -822,6 +809,7 @@ model TrainingEnrollment {
   updatedAt DateTime @updatedAt
   
   @@unique([employeeId, trainingId])
+  @@index([tenantId])
   @@index([employeeId])
   @@index([status])
 }
@@ -853,7 +841,7 @@ model Asset {
   serialNumber    String
   description     String?
   purchaseDate    DateTime?
-  purchasePrice   Decimal? @db.Numeric(12, 2)
+  purchasePrice   Decimal? @db.Decimal(12, 2)
   currency        String   @default("NGN")
   status          String   @default("GOOD") // NEW, GOOD, FAIR, DAMAGED, LOST
   
@@ -872,6 +860,7 @@ model Asset {
 
 model AssetAssignment {
   id              String   @id @default(cuid())
+  tenantId        String
   assetId         String
   employeeId      String
   assignedDate    DateTime
@@ -879,12 +868,14 @@ model AssetAssignment {
   condition       String?
   notes           String?
   
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   asset           Asset @relation(fields: [assetId], references: [id], onDelete: Cascade)
   employee        Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   
+  @@index([tenantId])
   @@index([employeeId])
   @@index([assetId])
 }

@@ -26,6 +26,6 @@
       "@lumion/database": ["packages/database/src/index.ts"]
     }
   },
-  "include": ["src"],
+  "include": ["apps/**/*", "packages/**/*", "middleware.ts"],
   "exclude": ["node_modules", "dist", ".next", "coverage"]
 }

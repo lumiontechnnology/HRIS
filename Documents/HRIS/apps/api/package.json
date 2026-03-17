@@ -12,14 +12,13 @@
     "format": "prettier --write src"
   },
   "dependencies": {
-    "@lumion/database": "*",
-    "@lumion/types": "*",
-    "@lumion/validators": "*",
+    "@clerk/clerk-sdk-node": "^4.13.0",
+    "@lumion/database": "workspace:*",
+    "@lumion/types": "workspace:*",
+    "@lumion/validators": "workspace:*",
     "@prisma/client": "^5.7.1",
-    "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "hono": "^3.12.0",
-    "jsonwebtoken": "^9.1.2",
     "redis": "^4.6.11",
     "zod": "^3.22.4"
   },
