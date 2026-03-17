@@ -1,11 +1,11 @@
 import * as React from "react"
 
-import type { ToastActionElement, Toast } from "@/components/toast/use-toast"
-
 const TOAST_LIMIT = 1
 const TOAST_REMOVE_DELAY = 1000000
 
-type ToasterToast = Toast & {
+export type ToastActionElement = React.ReactNode
+
+type ToasterToast = {
   id: string
   title?: React.ReactNode
   description?: React.ReactNode
@@ -13,6 +13,8 @@ type ToasterToast = Toast & {
   open?: boolean
   onOpenChange?: (open: boolean) => void
 }
+
+export type Toast = Omit<ToasterToast, "id">
 
 const actionTypes = {
   ADD_TOAST: "ADD_TOAST",
@@ -134,8 +136,6 @@ function dispatch(action: Action): void {
   })
 }
 
-type Toast = Omit<ToasterToast, "id">
-
 function toast(props: Toast): void {
   const id = genId()
 
@@ -166,19 +166,20 @@ function useToast(): {
   dismiss: (toastId?: string) => void
   toasts: ToasterToast[]
 } {
-  const [state, dispatch] = React.useReducer(reducer, {
-    toasts: [],
-  })
+  const [state, setState] = React.useState<State>({ toasts: [] })
 
   React.useEffect(() => {
-    listeners.push(dispatch)
+    const listener = (state: State) => {
+      setState(state)
+    }
+    listeners.push(listener)
     return () => {
-      const index = listeners.indexOf(dispatch)
+      const index = listeners.indexOf(listener)
       if (index > -1) {
         listeners.splice(index, 1)
       }
     }
-  }, [dispatch])
+  }, [])
 
   return {
     ...state,
@@ -189,4 +190,4 @@ function useToast(): {
 
 export { useToast, toast }
 
-export type { Toast, ToasterToast }
+export type { ToasterToast }
