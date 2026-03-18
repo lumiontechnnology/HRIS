@@ -5,7 +5,7 @@ export { Label } from './components/label';
 export { Select, SelectTrigger, SelectValue, SelectContent, SelectItem, SelectGroup, SelectLabel } from './components/select';
 export { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription } from './components/dialog';
 export { Tabs, TabsList, TabsTrigger, TabsContent } from './components/tabs';
-export { Toaster, Toast, ToastAction, ToastClose, ToastDescription, ToastTitle, ToastViewport } from './components/toast';
+export { Toaster, ToastProvider, Toast, ToastAction, ToastClose, ToastDescription, ToastTitle, ToastViewport } from './components/toast';
 export { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator } from './components/dropdown-menu';
 export { Popover, PopoverTrigger, PopoverContent } from './components/popover';
 export type { ToastActionElement, Toast as ToastType } from './components/toast/use-toast';

@@ -1,6 +1,7 @@
 import * as React from "react"
 import { useToast } from "./use-toast"
 import {
+  ToastProvider,
   Toast,
   ToastClose,
   ToastDescription,
@@ -12,7 +13,7 @@ export function Toaster(): JSX.Element {
   const { toasts } = useToast()
 
   return (
-    <>
+    <ToastProvider>
       {toasts.map(function ({ id, title, description, action, open, onOpenChange, ...props }) {
         return (
           <Toast key={id} open={open} onOpenChange={onOpenChange} {...props}>
@@ -28,6 +29,6 @@ export function Toaster(): JSX.Element {
         )
       })}
       <ToastViewport />
-    </>
+    </ToastProvider>
   )
 }
