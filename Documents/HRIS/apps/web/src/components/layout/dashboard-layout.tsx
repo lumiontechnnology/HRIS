@@ -27,13 +27,13 @@ export function DashboardLayout({
   }
 
   return (
-    <div className="flex min-h-screen bg-slate-100">
+    <div className="flex min-h-screen bg-background animate-fade-in">
       <Sidebar />
 
       <div className="flex min-w-0 flex-1 flex-col">
         <Header />
 
-        <main className="flex-1 px-4 py-5 md:px-6 lg:px-8">
+        <main className="flex-1 px-6 py-6">
           <div className="mx-auto flex w-full max-w-[1440px] flex-col gap-6">{children}</div>
         </main>
       </div>

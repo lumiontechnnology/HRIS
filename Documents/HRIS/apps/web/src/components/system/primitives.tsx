@@ -8,11 +8,11 @@ interface BadgeProps {
 }
 
 const badgeToneClasses: Record<NonNullable<BadgeProps['tone']>, string> = {
-  neutral: 'bg-slate-100 text-slate-700 border-slate-200',
-  success: 'bg-emerald-100 text-emerald-700 border-emerald-200',
-  warning: 'bg-amber-100 text-amber-700 border-amber-200',
-  danger: 'bg-rose-100 text-rose-700 border-rose-200',
-  info: 'bg-sky-100 text-sky-700 border-sky-200',
+  neutral: 'border-transparent bg-muted text-muted-foreground',
+  success: 'border-transparent bg-[hsl(var(--success)/0.10)] text-[hsl(var(--success))]',
+  warning: 'border-transparent bg-[hsl(var(--warning)/0.10)] text-[hsl(var(--warning))]',
+  danger: 'border-transparent bg-[hsl(var(--destructive)/0.10)] text-[hsl(var(--destructive))]',
+  info: 'border-transparent bg-[hsl(var(--info)/0.10)] text-[hsl(var(--info))]',
 };
 
 export function Badge({ children, tone = 'neutral' }: BadgeProps): JSX.Element {
@@ -70,10 +70,10 @@ export function SectionHeader({
   actions,
 }: SectionHeaderProps): JSX.Element {
   return (
-    <div className="flex flex-col gap-4 border-b border-slate-200 pb-4 md:flex-row md:items-end md:justify-between">
+    <div className="flex flex-col gap-4 border-b border-border pb-4 md:flex-row md:items-start md:justify-between">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">{title}</h1>
-        {description ? <p className="mt-1 text-sm text-slate-600">{description}</p> : null}
+        <h1 className="font-display text-2xl font-normal tracking-tight text-foreground">{title}</h1>
+        {description ? <p className="mt-0.5 text-sm text-muted-foreground">{description}</p> : null}
       </div>
       {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
     </div>
@@ -84,21 +84,15 @@ interface KpiCardProps {
   label: string;
   value: string;
   hint?: string;
-  icon?: ReactNode;
 }
 
-export function KpiCard({ label, value, hint, icon }: KpiCardProps): JSX.Element {
+export function KpiCard({ label, value, hint }: KpiCardProps): JSX.Element {
   return (
     <Card>
-      <CardHeader className="pb-2">
-        <CardDescription className="flex items-center justify-between text-xs uppercase tracking-wide">
-          <span>{label}</span>
-          {icon ? <span className="text-slate-500">{icon}</span> : null}
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <p className="text-2xl font-semibold text-slate-900">{value}</p>
-        {hint ? <p className="mt-1 text-xs text-slate-500">{hint}</p> : null}
+      <CardContent className="p-5">
+        <p className="text-label">{label}</p>
+        <p className="mt-2 font-mono text-3xl font-medium tracking-tight text-foreground tabular-nums">{value}</p>
+        {hint ? <p className="mt-1 text-xs text-muted-foreground">{hint}</p> : null}
       </CardContent>
     </Card>
   );
@@ -108,10 +102,10 @@ export function CardSkeleton(): JSX.Element {
   return (
     <Card>
       <CardHeader>
-        <div className="h-4 w-24 animate-pulse rounded bg-slate-200" />
+        <div className="h-3 w-20 animate-pulse rounded bg-muted" />
       </CardHeader>
       <CardContent>
-        <div className="h-7 w-16 animate-pulse rounded bg-slate-200" />
+        <div className="h-8 w-24 animate-pulse rounded bg-muted" />
       </CardContent>
     </Card>
   );
@@ -131,7 +125,7 @@ export function EmptyState({
   tone = 'default',
 }: EmptyStateProps): JSX.Element {
   return (
-    <Card className={cn(tone === 'friendly' ? 'border-sky-200 bg-sky-50' : '')}>
+    <Card className={cn(tone === 'friendly' ? 'border-border' : '')}>
       <CardHeader>
         <CardTitle>{title}</CardTitle>
         <CardDescription>{description}</CardDescription>

@@ -2,7 +2,6 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Button } from '@lumion/ui';
-import { Activity, Coins, UserCheck, Users } from 'lucide-react';
 import { KpiCard, SectionHeader, Badge, CardSkeleton } from '@/components/system/primitives';
 import { fetchDashboardApi } from '@/lib/dashboard-api';
 import { useCurrentUser } from '@/lib/client-auth';
@@ -33,6 +32,7 @@ function formatMoney(value: number): string {
 
 export default function DashboardPage(): JSX.Element {
   const { user } = useCurrentUser();
+  const monthLabel = new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' }).format(new Date());
 
   const { data, isLoading } = useQuery({
     queryKey: ['ui-dashboard', user?.id, user?.tenantId],
@@ -81,16 +81,16 @@ export default function DashboardPage(): JSX.Element {
   return (
     <div className="space-y-6">
       <SectionHeader
-        title="Dashboard"
-        description="Operational snapshot across workforce, payroll, approvals, and hiring."
-        actions={<Button>Export Snapshot</Button>}
+        title={`Good morning${user?.firstName ? `, ${user.firstName}` : ''}.`}
+        description={`Here's what's happening at Lumion today. ${monthLabel}`}
+        actions={<Button variant="outline">Export snapshot</Button>}
       />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <KpiCard label="Total Employees" value={String(totalEmployees)} hint="Current workforce" icon={<Users className="h-4 w-4" />} />
-        <KpiCard label="Active Employees" value={String(activeEmployees)} hint={totalEmployees > 0 ? `${((activeEmployees / totalEmployees) * 100).toFixed(1)}% active` : 'No active employees'} icon={<UserCheck className="h-4 w-4" />} />
-        <KpiCard label="Monthly Payroll Cost" value={formatMoney(monthlyPayrollCost)} hint="Latest payroll run" icon={<Coins className="h-4 w-4" />} />
-        <KpiCard label="Attrition Rate" value={`${attritionRate}%`} hint="Rolling 12 months" icon={<Activity className="h-4 w-4" />} />
+      <div className="grid gap-5 md:grid-cols-3 xl:grid-cols-4">
+        <KpiCard label="Total Employees" value={String(totalEmployees)} hint="Current workforce" />
+        <KpiCard label="Active Employees" value={String(activeEmployees)} hint={totalEmployees > 0 ? `${((activeEmployees / totalEmployees) * 100).toFixed(1)}% active` : 'No active employees'} />
+        <KpiCard label="Monthly Payroll" value={formatMoney(monthlyPayrollCost)} hint="Latest payroll run" />
+        <KpiCard label="Attrition Rate" value={`${attritionRate}%`} hint="Rolling 12 months" />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-3">
@@ -100,14 +100,14 @@ export default function DashboardPage(): JSX.Element {
             <CardDescription>Last 12 months</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-12 items-end gap-2 rounded-md border border-slate-200 bg-slate-50 p-4">
+            <div className="grid grid-cols-12 items-end gap-2 rounded-md border border-border bg-card p-4">
               {headcountTrend.map((point) => (
                 <div key={point.label} className="flex flex-col items-center gap-2">
                   <div
-                    className="w-full rounded-sm bg-slate-900"
+                    className="w-full rounded-sm bg-foreground"
                     style={{ height: `${Math.max(12, (point.value / maxHeadcount) * 130)}px` }}
                   />
-                  <span className="text-[10px] text-slate-500">{point.label}</span>
+                  <span className="text-[10px] text-muted-foreground">{point.label}</span>
                 </div>
               ))}
             </div>
@@ -123,12 +123,12 @@ export default function DashboardPage(): JSX.Element {
             {departmentDistribution.map((dept) => (
               <div key={dept.name}>
                 <div className="mb-1 flex items-center justify-between text-sm">
-                  <span className="text-slate-700">{dept.name}</span>
-                  <span className="font-semibold text-slate-900">{dept.count}</span>
+                  <span className="text-foreground">{dept.name}</span>
+                  <span className="font-mono font-medium tabular-nums text-foreground">{dept.count}</span>
                 </div>
-                <div className="h-2 rounded bg-slate-200">
+                <div className="h-2 rounded bg-muted">
                   <div
-                    className="h-2 rounded bg-slate-800"
+                    className="h-2 rounded bg-foreground"
                     style={{ width: `${(dept.count / maxDept) * 100}%` }}
                   />
                 </div>
@@ -146,13 +146,13 @@ export default function DashboardPage(): JSX.Element {
           </CardHeader>
           <CardContent className="space-y-3">
             {pendingApprovals.map((item) => (
-              <div key={item.id} className="rounded border border-slate-200 p-3">
+              <div key={item.id} className="rounded-md border border-border p-4">
                 <div className="mb-2 flex items-center justify-between">
-                  <span className="text-sm font-semibold text-slate-900">{item.type}</span>
+                  <span className="text-sm font-medium text-foreground">{item.type}</span>
                   <Badge tone="warning">{item.age}</Badge>
                 </div>
-                <p className="text-sm text-slate-600">{item.owner}</p>
-                <p className="mt-1 text-xs text-slate-500">{item.id}</p>
+                <p className="text-sm text-muted-foreground">{item.owner}</p>
+                <p className="mt-1 font-mono text-xs text-muted-foreground tabular-nums">{item.id}</p>
               </div>
             ))}
           </CardContent>
@@ -165,8 +165,8 @@ export default function DashboardPage(): JSX.Element {
           </CardHeader>
           <CardContent className="space-y-3">
             {notifications.map((note) => (
-              <div key={note.id} className="rounded border border-slate-200 p-3 text-sm text-slate-700">
-                <p className="font-medium text-slate-900">{note.title}</p>
+              <div key={note.id} className="rounded-md border border-border p-4 text-sm text-foreground">
+                <p className="font-medium text-foreground">{note.title}</p>
                 <p className="mt-1">{note.message}</p>
               </div>
             ))}
@@ -180,10 +180,10 @@ export default function DashboardPage(): JSX.Element {
           </CardHeader>
           <CardContent className="space-y-3">
             {activityLog.map((item) => (
-              <div key={item.id} className="rounded border border-slate-200 p-3">
-                <p className="text-sm font-medium text-slate-900">{item.actor}</p>
-                <p className="text-sm text-slate-600">{item.action}</p>
-                <p className="mt-1 text-xs text-slate-500">{new Date(item.time).toLocaleTimeString()}</p>
+              <div key={item.id} className="rounded-md border border-border p-4">
+                <p className="text-sm font-medium text-foreground">{item.actor}</p>
+                <p className="text-sm text-muted-foreground">{item.action}</p>
+                <p className="mt-1 font-mono text-xs text-muted-foreground tabular-nums">{new Date(item.time).toLocaleTimeString()}</p>
               </div>
             ))}
           </CardContent>

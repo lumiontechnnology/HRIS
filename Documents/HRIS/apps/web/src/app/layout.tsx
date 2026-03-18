@@ -1,6 +1,15 @@
+import { Instrument_Serif } from 'next/font/google';
+import { GeistSans } from 'geist/font/sans';
+import { GeistMono } from 'geist/font/mono';
 import { AuthHeader } from '@/components/auth-header';
 import { QueryProvider } from '@/components/providers/query-provider';
 import './globals.css';
+
+const fontDisplay = Instrument_Serif({
+  subsets: ['latin'],
+  weight: '400',
+  variable: '--font-display',
+});
 
 export const runtime = 'nodejs';
 
@@ -19,7 +28,7 @@ export default function RootLayout({
 }): JSX.Element {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body>
+      <body className={`${GeistSans.variable} ${GeistMono.variable} ${fontDisplay.variable}`}>
         <QueryProvider>
           <AuthHeader />
           {children}
