@@ -1,4 +1,5 @@
 import { AuthHeader } from '@/components/auth-header';
+import { QueryProvider } from '@/components/providers/query-provider';
 import './globals.css';
 
 export const runtime = 'nodejs';
@@ -19,8 +20,10 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body>
-        <AuthHeader />
-        {children}
+        <QueryProvider>
+          <AuthHeader />
+          {children}
+        </QueryProvider>
       </body>
     </html>
   );
