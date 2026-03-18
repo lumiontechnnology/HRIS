@@ -24,7 +24,7 @@ lumion-hris/
 
 ### Prerequisites
 
-- **Node.js** 20+ (use `nvm` if needed)
+- **Node.js** 20.x recommended locally, `>=20 <25` supported for hosted build environments
 - **PostgreSQL** 15+ (local or Supabase)
 - **npm** 10+ or **yarn**
 

@@ -6,8 +6,8 @@
   "private": true,
   "packageManager": "pnpm@10.32.1",
   "engines": {
-    "node": "20.x",
-    "npm": "10.x"
+    "node": ">=20 <25",
+    "npm": ">=10 <11"
   },
   "scripts": {
     "postinstall": "pnpm --filter @lumion/database db:generate",
