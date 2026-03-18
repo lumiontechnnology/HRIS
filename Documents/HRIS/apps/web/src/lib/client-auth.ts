@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import type { User } from '@supabase/supabase-js';
+import type { SupabaseClient, User } from '@supabase/supabase-js';
 
 interface CurrentUser {
   id: string;
@@ -101,11 +101,24 @@ const includesPermission = (permissions: Set<string>, resource: string, action: 
 };
 
 function useSupabaseAuthState() {
-  const supabase = useMemo(() => createClient(), []);
+  const [supabase, setSupabase] = useState<SupabaseClient | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    try {
+      setSupabase(createClient());
+    } catch (error) {
+      console.error('Failed to initialize Supabase client:', error);
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!supabase) {
+      return;
+    }
+
     const initialize = async () => {
       const {
         data: { user: currentUser },
