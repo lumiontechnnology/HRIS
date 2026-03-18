@@ -1,24 +1,86 @@
 'use client';
 
+import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@lumion/ui';
 import { DataTable, type ColumnDef } from '@/components/system/data-table';
-import { SectionHeader, Badge } from '@/components/system/primitives';
+import { SectionHeader, Badge, CardSkeleton } from '@/components/system/primitives';
+import { useCurrentUser } from '@/lib/client-auth';
+import { fetchDashboardApi } from '@/lib/dashboard-api';
 
 interface GoalRow {
   id: string;
   employee: string;
   goal: string;
   progress: number;
-  workflow: 'Self Appraisal' | 'Manager Review' | 'Calibration' | 'Finalized';
+  workflow: 'ACTIVE' | 'ON_TRACK' | 'COMPLETED' | 'MISSED';
 }
 
-const goalRows: GoalRow[] = [
-  { id: 'PF-001', employee: 'Chioma Adeyemi', goal: 'Reduce API response latency by 20%', progress: 78, workflow: 'Manager Review' },
-  { id: 'PF-002', employee: 'Tunde Okafor', goal: 'Ship payroll export automation', progress: 65, workflow: 'Self Appraisal' },
-  { id: 'PF-003', employee: 'Blessing Okafor', goal: 'Improve onboarding completion to 95%', progress: 91, workflow: 'Calibration' },
-];
+interface PerformanceGoalsResponse {
+  data: Array<{
+    id: string;
+    title: string;
+    targetValue?: string | null;
+    currentValue?: string | null;
+    status: GoalRow['workflow'];
+    employee: {
+      firstName: string;
+      lastName: string;
+    };
+  }>;
+}
+
+interface PerformanceSummaryResponse {
+  data: {
+    distribution: Array<{ label: string; value: number }>;
+  };
+}
+
+function parseProgress(current?: string | null, target?: string | null): number {
+  const currentNumber = Number(current);
+  const targetNumber = Number(target);
+
+  if (Number.isFinite(currentNumber) && Number.isFinite(targetNumber) && targetNumber > 0) {
+    return Math.max(0, Math.min(100, Math.round((currentNumber / targetNumber) * 100)));
+  }
+
+  return 0;
+}
 
 export default function PerformancePage(): JSX.Element {
+  const { user } = useCurrentUser();
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['ui-performance', user?.id, user?.tenantId],
+    enabled: !!user?.tenantId,
+    queryFn: async () => {
+      const [goalsResponse, summaryResponse] = await Promise.all([
+        fetchDashboardApi<PerformanceGoalsResponse>(
+          '/api/v1/performance/goals?limit=200',
+          user ? { id: user.id, tenantId: user.tenantId } : undefined
+        ),
+        fetchDashboardApi<PerformanceSummaryResponse>(
+          '/api/v1/performance/summary',
+          user ? { id: user.id, tenantId: user.tenantId } : undefined
+        ),
+      ]);
+
+      const goals: GoalRow[] = goalsResponse.data.map((goal) => ({
+        id: goal.id,
+        employee: `${goal.employee.firstName} ${goal.employee.lastName}`.trim(),
+        goal: goal.title,
+        progress: parseProgress(goal.currentValue, goal.targetValue),
+        workflow: goal.status,
+      }));
+
+      return {
+        goals,
+        distribution: summaryResponse.data.distribution,
+      };
+    },
+  });
+
+  const goalRows = data?.goals || [];
+
   const columns: ColumnDef<GoalRow>[] = [
     { key: 'employee', label: 'Employee', sortable: true },
     { key: 'goal', label: 'Goal', sortable: true },
@@ -32,15 +94,27 @@ export default function PerformancePage(): JSX.Element {
       key: 'workflow',
       label: 'Review Workflow',
       sortable: true,
-      render: (row) => <Badge tone={row.workflow === 'Finalized' ? 'success' : 'info'}>{row.workflow}</Badge>,
+      render: (row) => (
+        <Badge tone={row.workflow === 'COMPLETED' ? 'success' : row.workflow === 'MISSED' ? 'danger' : 'info'}>
+          {row.workflow}
+        </Badge>
+      ),
     },
   ];
 
-  const distribution = [
-    { label: 'High', value: 18 },
-    { label: 'Solid', value: 72 },
-    { label: 'Needs Support', value: 10 },
-  ];
+  const distribution = data?.distribution || [];
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <SectionHeader
+          title="Performance"
+          description="Track goals, review stages, and organizational performance distribution."
+        />
+        <CardSkeleton />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

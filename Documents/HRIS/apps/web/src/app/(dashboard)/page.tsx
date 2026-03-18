@@ -1,41 +1,82 @@
 'use client';
 
+import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Button } from '@lumion/ui';
 import { Activity, Coins, UserCheck, Users } from 'lucide-react';
-import { KpiCard, SectionHeader, Badge } from '@/components/system/primitives';
+import { KpiCard, SectionHeader, Badge, CardSkeleton } from '@/components/system/primitives';
+import { fetchDashboardApi } from '@/lib/dashboard-api';
+import { useCurrentUser } from '@/lib/client-auth';
 
-const headcountTrend = [112, 114, 117, 120, 122, 124, 126, 129, 132, 134, 136, 138];
+interface DashboardSummaryResponse {
+  data: {
+    kpis: {
+      totalEmployees: number;
+      activeEmployees: number;
+      monthlyPayrollCost: number;
+      attritionRate: number;
+    };
+    headcountTrend: Array<{ label: string; value: number }>;
+    departmentDistribution: Array<{ name: string; count: number }>;
+    pendingApprovals: Array<{ id: string; type: string; owner: string; age: string }>;
+    notifications: Array<{ id: string; title: string; message: string; read: boolean }>;
+    activityLog: Array<{ id: string; actor: string; action: string; time: string }>;
+  };
+}
 
-const departmentDistribution = [
-  { name: 'Engineering', count: 48 },
-  { name: 'Sales', count: 26 },
-  { name: 'HR', count: 14 },
-  { name: 'Finance', count: 12 },
-  { name: 'Operations', count: 18 },
-];
-
-const pendingApprovals = [
-  { id: 'APR-1001', type: 'Leave Request', owner: 'Amara Ngoako', age: '2h' },
-  { id: 'APR-1002', type: 'Payroll Override', owner: 'David Peter', age: '5h' },
-  { id: 'APR-1003', type: 'New Position', owner: 'Blessing Okafor', age: '1d' },
-];
-
-const notifications = [
-  'Payroll run is due for review by 3:00 PM.',
-  '5 new candidates moved to interview stage.',
-  'Onboarding tasks pending for 3 new hires.',
-];
-
-const activityLog = [
-  { actor: 'Chioma Adeyemi', action: 'approved leave request', time: '08:45' },
-  { actor: 'Finance Bot', action: 'generated payroll draft', time: '08:32' },
-  { actor: 'Recruitment Team', action: 'published Backend Engineer role', time: '08:18' },
-  { actor: 'HR Admin', action: 'updated compensation band', time: '07:57' },
-];
+function formatMoney(value: number): string {
+  return new Intl.NumberFormat('en-NG', {
+    style: 'currency',
+    currency: 'NGN',
+    maximumFractionDigits: 0,
+  }).format(value);
+}
 
 export default function DashboardPage(): JSX.Element {
-  const maxHeadcount = Math.max(...headcountTrend);
-  const maxDept = Math.max(...departmentDistribution.map((item) => item.count));
+  const { user } = useCurrentUser();
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['ui-dashboard', user?.id, user?.tenantId],
+    enabled: !!user?.tenantId,
+    refetchInterval: 15000,
+    queryFn: async () =>
+      fetchDashboardApi<DashboardSummaryResponse>(
+        '/api/v1/dashboard/summary',
+        user ? { id: user.id, tenantId: user.tenantId } : undefined
+      ),
+  });
+
+  const summary = data?.data;
+
+  const headcountTrend = summary?.headcountTrend || [];
+  const departmentDistribution = summary?.departmentDistribution || [];
+  const pendingApprovals = summary?.pendingApprovals || [];
+  const notifications = summary?.notifications || [];
+  const activityLog = summary?.activityLog || [];
+
+  const maxHeadcount = Math.max(...headcountTrend.map((item) => item.value), 1);
+  const maxDept = Math.max(...departmentDistribution.map((item) => item.count), 1);
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <SectionHeader
+          title="Dashboard"
+          description="Operational snapshot across workforce, payroll, approvals, and hiring."
+        />
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <CardSkeleton />
+          <CardSkeleton />
+          <CardSkeleton />
+          <CardSkeleton />
+        </div>
+      </div>
+    );
+  }
+
+  const totalEmployees = summary?.kpis.totalEmployees || 0;
+  const activeEmployees = summary?.kpis.activeEmployees || 0;
+  const monthlyPayrollCost = summary?.kpis.monthlyPayrollCost || 0;
+  const attritionRate = summary?.kpis.attritionRate || 0;
 
   return (
     <div className="space-y-6">
@@ -46,10 +87,10 @@ export default function DashboardPage(): JSX.Element {
       />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <KpiCard label="Total Employees" value="138" hint="+4 this month" icon={<Users className="h-4 w-4" />} />
-        <KpiCard label="Active Employees" value="131" hint="94.9% active" icon={<UserCheck className="h-4 w-4" />} />
-        <KpiCard label="Monthly Payroll Cost" value="NGN 329.4M" hint="Current draft cycle" icon={<Coins className="h-4 w-4" />} />
-        <KpiCard label="Attrition Rate" value="2.4%" hint="Rolling 12 months" icon={<Activity className="h-4 w-4" />} />
+        <KpiCard label="Total Employees" value={String(totalEmployees)} hint="Current workforce" icon={<Users className="h-4 w-4" />} />
+        <KpiCard label="Active Employees" value={String(activeEmployees)} hint={totalEmployees > 0 ? `${((activeEmployees / totalEmployees) * 100).toFixed(1)}% active` : 'No active employees'} icon={<UserCheck className="h-4 w-4" />} />
+        <KpiCard label="Monthly Payroll Cost" value={formatMoney(monthlyPayrollCost)} hint="Latest payroll run" icon={<Coins className="h-4 w-4" />} />
+        <KpiCard label="Attrition Rate" value={`${attritionRate}%`} hint="Rolling 12 months" icon={<Activity className="h-4 w-4" />} />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-3">
@@ -60,13 +101,13 @@ export default function DashboardPage(): JSX.Element {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-12 items-end gap-2 rounded-md border border-slate-200 bg-slate-50 p-4">
-              {headcountTrend.map((value, index) => (
-                <div key={value + index} className="flex flex-col items-center gap-2">
+              {headcountTrend.map((point) => (
+                <div key={point.label} className="flex flex-col items-center gap-2">
                   <div
                     className="w-full rounded-sm bg-slate-900"
-                    style={{ height: `${Math.max(12, (value / maxHeadcount) * 130)}px` }}
+                    style={{ height: `${Math.max(12, (point.value / maxHeadcount) * 130)}px` }}
                   />
-                  <span className="text-[10px] text-slate-500">M{index + 1}</span>
+                  <span className="text-[10px] text-slate-500">{point.label}</span>
                 </div>
               ))}
             </div>
@@ -124,8 +165,9 @@ export default function DashboardPage(): JSX.Element {
           </CardHeader>
           <CardContent className="space-y-3">
             {notifications.map((note) => (
-              <div key={note} className="rounded border border-slate-200 p-3 text-sm text-slate-700">
-                {note}
+              <div key={note.id} className="rounded border border-slate-200 p-3 text-sm text-slate-700">
+                <p className="font-medium text-slate-900">{note.title}</p>
+                <p className="mt-1">{note.message}</p>
               </div>
             ))}
           </CardContent>
@@ -138,10 +180,10 @@ export default function DashboardPage(): JSX.Element {
           </CardHeader>
           <CardContent className="space-y-3">
             {activityLog.map((item) => (
-              <div key={`${item.actor}-${item.time}`} className="rounded border border-slate-200 p-3">
+              <div key={item.id} className="rounded border border-slate-200 p-3">
                 <p className="text-sm font-medium text-slate-900">{item.actor}</p>
                 <p className="text-sm text-slate-600">{item.action}</p>
-                <p className="mt-1 text-xs text-slate-500">{item.time}</p>
+                <p className="mt-1 text-xs text-slate-500">{new Date(item.time).toLocaleTimeString()}</p>
               </div>
             ))}
           </CardContent>

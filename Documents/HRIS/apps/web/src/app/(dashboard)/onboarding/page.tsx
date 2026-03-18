@@ -1,21 +1,101 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@lumion/ui';
-import { EmptyState, SectionHeader } from '@/components/system/primitives';
+import { Badge, CardSkeleton, EmptyState, SectionHeader } from '@/components/system/primitives';
+import { useCurrentUser } from '@/lib/client-auth';
+import { fetchDashboardApi } from '@/lib/dashboard-api';
 
-const onboardingTasks = [
-  { id: 'ONB-1', label: 'Create employee account', done: true },
-  { id: 'ONB-2', label: 'Assign manager and department', done: true },
-  { id: 'ONB-3', label: 'Upload employment documents', done: false },
-  { id: 'ONB-4', label: 'Enroll payroll profile', done: false },
-  { id: 'ONB-5', label: 'Complete orientation checklist', done: false },
+interface NotificationResponse {
+  data: Array<{
+    id: string;
+    type: string;
+    title: string;
+    message: string;
+    read: boolean;
+    createdAt: string;
+  }>;
+}
+
+interface HiredApplicationsResponse {
+  data: Array<{
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    status: string;
+    updatedAt: string;
+  }>;
+}
+
+interface TaskState {
+  id: string;
+  label: string;
+  done: boolean;
+}
+
+const defaultTaskTemplate: TaskState[] = [
+  { id: 'ACC', label: 'Create employee account', done: true },
+  { id: 'MGR', label: 'Assign manager and department', done: true },
+  { id: 'DOC', label: 'Upload employment documents', done: false },
+  { id: 'PAY', label: 'Enroll payroll profile', done: false },
+  { id: 'ORI', label: 'Complete orientation checklist', done: false },
 ];
 
 export default function OnboardingPage(): JSX.Element {
-  const [tasks, setTasks] = useState(onboardingTasks);
+  const { user } = useCurrentUser();
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['ui-onboarding', user?.id, user?.tenantId],
+    enabled: !!user?.tenantId,
+    refetchInterval: 15000,
+    queryFn: async () => {
+      const [notifications, hiredApplications] = await Promise.all([
+        fetchDashboardApi<NotificationResponse>(
+          '/api/v1/notifications?limit=100',
+          user ? { id: user.id, tenantId: user.tenantId } : undefined
+        ),
+        fetchDashboardApi<HiredApplicationsResponse>(
+          '/api/v1/recruitment/applications?status=HIRED&limit=50',
+          user ? { id: user.id, tenantId: user.tenantId } : undefined
+        ),
+      ]);
+
+      return {
+        onboardingNotifications: notifications.data.filter((n) => n.type === 'ONBOARDING_READY'),
+        hires: hiredApplications.data,
+      };
+    },
+  });
+
+  const [tasks, setTasks] = useState(defaultTaskTemplate);
   const completed = tasks.filter((task) => task.done).length;
   const progress = Math.round((completed / tasks.length) * 100);
+
+  const hires = data?.hires || [];
+  const onboardingNotifications = data?.onboardingNotifications || [];
+
+  const latestHires = useMemo(
+    () =>
+      [...hires]
+        .sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime())
+        .slice(0, 8),
+    [hires]
+  );
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <SectionHeader
+          title="Onboarding"
+          description="Track new-hire setup and drive completion across all onboarding milestones."
+        />
+        <CardSkeleton />
+        <CardSkeleton />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -34,6 +114,33 @@ export default function OnboardingPage(): JSX.Element {
             <div className="h-3 rounded bg-slate-900" style={{ width: `${progress}%` }} />
           </div>
           <p className="mt-2 text-sm text-slate-600">Current completion: {progress}%</p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>New Hire Queue</CardTitle>
+          <CardDescription>Automatically populated from recruitment hires</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {latestHires.length === 0 ? (
+            <p className="text-sm text-slate-500">No newly hired candidates waiting for onboarding.</p>
+          ) : (
+            latestHires.map((hire) => (
+              <div key={hire.id} className="rounded border border-slate-200 p-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="text-sm font-semibold text-slate-900">
+                    {hire.firstName} {hire.lastName}
+                  </p>
+                  <Badge tone="info">{hire.status}</Badge>
+                </div>
+                <p className="text-xs text-slate-600">{hire.email}</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Hired on {new Date(hire.updatedAt).toLocaleDateString()}
+                </p>
+              </div>
+            ))
+          )}
         </CardContent>
       </Card>
 
@@ -65,10 +172,32 @@ export default function OnboardingPage(): JSX.Element {
 
       <EmptyState
         tone="friendly"
-        title="Welcome flow enabled"
-        description="Friendly illustration area reserved for new-hire guidance and culture material."
+        title="Onboarding notifications live"
+        description={
+          onboardingNotifications.length > 0
+            ? `${onboardingNotifications.length} onboarding alerts available for action.`
+            : 'No onboarding alerts at the moment.'
+        }
         action={<Button>Open New Hire Pack</Button>}
       />
+
+      {onboardingNotifications.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Onboarding Alerts</CardTitle>
+            <CardDescription>Real-time feed from notifications service</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {onboardingNotifications.map((item) => (
+              <div key={item.id} className="rounded border border-slate-200 p-3">
+                <p className="text-sm font-medium text-slate-900">{item.title}</p>
+                <p className="mt-1 text-sm text-slate-600">{item.message}</p>
+                <p className="mt-1 text-xs text-slate-500">{new Date(item.createdAt).toLocaleString()}</p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   );
 }

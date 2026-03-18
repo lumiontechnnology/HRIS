@@ -52,6 +52,149 @@ const InterviewSchema = z.object({
   completedAt: z.string().datetime().optional(),
 });
 
+async function nextEmployeeCode(tenantId: string): Promise<string> {
+  const count = await prisma.employee.count({ where: { tenantId } });
+  return `LMN-${String(count + 1).padStart(4, '0')}`;
+}
+
+async function createOfferArtifacts(params: {
+  tenantId: string;
+  applicationId: string;
+  candidateName: string;
+  userId?: string;
+}): Promise<void> {
+  const offerUrl = `/recruitment/applications/${params.applicationId}/offer-letter`;
+
+  await Promise.all([
+    prisma.notification.create({
+      data: {
+        tenantId: params.tenantId,
+        type: 'RECRUITMENT_OFFER',
+        title: 'Offer Ready for Review',
+        message: `Offer package prepared for ${params.candidateName}.`,
+        actionUrl: offerUrl,
+      },
+    }),
+    prisma.auditLog.create({
+      data: {
+        tenantId: params.tenantId,
+        userId: params.userId,
+        action: 'UPDATE',
+        resource: 'Application',
+        resourceId: params.applicationId,
+        changes: {
+          event: 'OFFER_AUTOMATION_TRIGGERED',
+          offerUrl,
+        },
+      },
+    }),
+  ]);
+}
+
+async function createEmployeeFromHire(params: {
+  tenantId: string;
+  applicationId: string;
+  userId?: string;
+}): Promise<{ employeeId: string; created: boolean }> {
+  const application = await prisma.application.findFirst({
+    where: { id: params.applicationId, tenantId: params.tenantId },
+    include: {
+      jobRequisition: true,
+    },
+  });
+
+  if (!application) {
+    throw new Error('Application not found');
+  }
+
+  const existingEmployee = await prisma.employee.findFirst({
+    where: {
+      tenantId: params.tenantId,
+      email: application.email,
+    },
+    select: { id: true },
+  });
+
+  if (existingEmployee) {
+    await prisma.notification.create({
+      data: {
+        tenantId: params.tenantId,
+        type: 'ONBOARDING_READY',
+        title: 'Onboarding Checklist Ready',
+        message: `${application.firstName} ${application.lastName} is marked hired. Complete onboarding tasks.`,
+        actionUrl: '/onboarding',
+      },
+    });
+
+    return { employeeId: existingEmployee.id, created: false };
+  }
+
+  const [defaultLocation, fallbackDepartment] = await Promise.all([
+    prisma.location.findFirst({ where: { tenantId: params.tenantId }, select: { id: true } }),
+    prisma.department.findFirst({ where: { tenantId: params.tenantId }, select: { id: true } }),
+  ]);
+
+  if (!defaultLocation) {
+    throw new Error('No location configured for tenant');
+  }
+
+  const departmentId = application.jobRequisition.departmentId || fallbackDepartment?.id;
+  if (!departmentId) {
+    throw new Error('No department configured for tenant');
+  }
+
+  const employeeCode = await nextEmployeeCode(params.tenantId);
+  const salary = Number(application.jobRequisition.salary_max || application.jobRequisition.salary_min || 0);
+
+  const createdEmployee = await prisma.employee.create({
+    data: {
+      tenantId: params.tenantId,
+      employeeId: employeeCode,
+      firstName: application.firstName,
+      lastName: application.lastName,
+      email: application.email,
+      phone: application.phone,
+      hireDate: new Date(),
+      employmentType: 'FULL_TIME',
+      employmentStatus: 'ACTIVE',
+      jobTitleId: application.jobRequisition.jobTitleId,
+      departmentId,
+      locationId: defaultLocation.id,
+      salary,
+      currency: application.jobRequisition.currency,
+      salaryFrequency: 'MONTHLY',
+    },
+  });
+
+  await Promise.all([
+    prisma.notification.create({
+      data: {
+        tenantId: params.tenantId,
+        type: 'ONBOARDING_READY',
+        title: 'New Hire Ready for Onboarding',
+        message: `${application.firstName} ${application.lastName} profile has been created and is ready for onboarding.`,
+        actionUrl: '/onboarding',
+      },
+    }),
+    prisma.auditLog.create({
+      data: {
+        tenantId: params.tenantId,
+        userId: params.userId,
+        action: 'CREATE',
+        resource: 'Employee',
+        resourceId: createdEmployee.id,
+        changes: {
+          source: 'RECRUITMENT_HIRE_TRIGGER',
+          applicationId: application.id,
+          candidateEmail: application.email,
+        },
+      },
+    }),
+  ]);
+
+  return { employeeId: createdEmployee.id, created: true };
+}
+
 export function createRecruitmentRoutes(): Hono {
   const app = new Hono();
 
@@ -291,6 +434,42 @@ export function createRecruitmentRoutes(): Hono {
     }
   });
 
+  app.get('/applications/:id/offer-letter', async (c) => {
+    try {
+      const tenantId = c.req.header('x-tenant-id');
+      const id = c.req.param('id');
+      if (!tenantId) {
+        return c.json({ success: false, error: { message: 'Tenant ID required' } }, 400);
+      }
+
+      const application = await prisma.application.findFirst({
+        where: { id, tenantId },
+        include: {
+          jobRequisition: true,
+        },
+      });
+
+      if (!application) {
+        return c.json({ success: false, error: { message: 'Application not found' } }, 404);
+      }
+
+      const offerLetter = {
+        candidateName: `${application.firstName} ${application.lastName}`.trim(),
+        roleDescription: application.jobRequisition.description,
+        salaryMin: Number(application.jobRequisition.salary_min || 0),
+        salaryMax: Number(application.jobRequisition.salary_max || 0),
+        currency: application.jobRequisition.currency,
+        generatedAt: new Date().toISOString(),
+        offerUrl: `/recruitment/applications/${application.id}/offer-letter`,
+      };
+
+      return c.json({ success: true, data: offerLetter });
+    } catch (error) {
+      console.error('Error generating offer letter:', error);
+      return c.json({ success: false, error: { message: 'Failed to generate offer letter' } }, 500);
+    }
+  });
+
   app.post('/applications', async (c) => {
     try {
       const tenantId = c.req.header('x-tenant-id');
@@ -351,6 +530,7 @@ export function createRecruitmentRoutes(): Hono {
   app.patch('/applications/:id', async (c) => {
     try {
       const tenantId = c.req.header('x-tenant-id');
+      const userId = c.req.header('x-user-id') || undefined;
       const id = c.req.param('id');
       if (!tenantId) {
         return c.json({ success: false, error: { message: 'Tenant ID required' } }, 400);
@@ -384,13 +564,46 @@ export function createRecruitmentRoutes(): Hono {
         .strict();
       const validated = updateSchema.parse(body);
 
+      const updatePayload = {
+        ...validated,
+        currentStage:
+          validated.currentStage ||
+          (validated.status === 'OFFER' ? 'OFFER' : validated.status === 'HIRED' ? 'HIRED' : undefined),
+      };
+
       const updated = await prisma.application.update({
         where: { id },
-        data: validated,
+        data: updatePayload,
         include: { jobRequisition: true, interviews: { orderBy: { scheduledAt: 'asc' } } },
       });
 
-      return c.json({ success: true, data: updated });
+      if (existing.status !== 'OFFER' && updated.status === 'OFFER') {
+        await createOfferArtifacts({
+          tenantId,
+          applicationId: updated.id,
+          candidateName: `${updated.firstName} ${updated.lastName}`.trim(),
+          userId,
+        });
+      }
+
+      let hireAutomation: { employeeId: string; created: boolean } | null = null;
+      if (existing.status !== 'HIRED' && updated.status === 'HIRED') {
+        hireAutomation = await createEmployeeFromHire({
+          tenantId,
+          applicationId: updated.id,
+          userId,
+        });
+      }
+
+      return c.json({
+        success: true,
+        data: updated,
+        meta: hireAutomation
+          ? {
+              hireAutomation,
+            }
+          : undefined,
+      });
     } catch (error) {
       if (error instanceof z.ZodError) {
         return c.json({ success: false, error: { message: 'Validation failed', details: error.errors } }, 400);

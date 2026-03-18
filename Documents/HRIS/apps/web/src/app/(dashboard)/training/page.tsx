@@ -1,8 +1,11 @@
 'use client';
 
+import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@lumion/ui';
 import { DataTable, type ColumnDef } from '@/components/system/data-table';
-import { SectionHeader } from '@/components/system/primitives';
+import { SectionHeader, CardSkeleton } from '@/components/system/primitives';
+import { useCurrentUser } from '@/lib/client-auth';
+import { fetchDashboardApi } from '@/lib/dashboard-api';
 
 interface TrainingRow {
   id: string;
@@ -12,19 +15,54 @@ interface TrainingRow {
   status: string;
 }
 
-const rows: TrainingRow[] = [
-  { id: 'TR-001', title: 'Leadership Essentials', provider: 'Lumion Academy', type: 'Internal', status: 'Enrolled' },
-  { id: 'TR-002', title: 'Advanced Payroll Compliance', provider: 'Finance Guild', type: 'External', status: 'In Progress' },
-  { id: 'TR-003', title: 'Secure Coding Standards', provider: 'Engineering Guild', type: 'Internal', status: 'Completed' },
-];
+interface TrainingEnrollmentResponse {
+  data: Array<{
+    id: string;
+    status: string;
+    training: {
+      title: string;
+      provider?: string | null;
+      type: string;
+    };
+  }>;
+}
 
 export default function TrainingPage(): JSX.Element {
+  const { user } = useCurrentUser();
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['ui-training', user?.id, user?.tenantId],
+    enabled: !!user?.tenantId,
+    queryFn: async () =>
+      fetchDashboardApi<TrainingEnrollmentResponse>(
+        '/api/v1/training/enrollments?limit=200',
+        user ? { id: user.id, tenantId: user.tenantId } : undefined
+      ),
+  });
+
+  const rows: TrainingRow[] = (data?.data || []).map((record) => ({
+    id: record.id,
+    title: record.training.title,
+    provider: record.training.provider || 'Internal Program',
+    type: record.training.type,
+    status: record.status,
+  }));
+
   const columns: ColumnDef<TrainingRow>[] = [
     { key: 'title', label: 'Training', sortable: true },
     { key: 'provider', label: 'Provider', sortable: true },
     { key: 'type', label: 'Type', sortable: true },
     { key: 'status', label: 'Status', sortable: true },
   ];
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <SectionHeader title="Training" description="Track development plans and enrollment outcomes." />
+        <CardSkeleton />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

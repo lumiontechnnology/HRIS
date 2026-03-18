@@ -15,6 +15,10 @@ import { createLeaveRoutes } from './routes/leave.js';
 import { createAttendanceRoutes } from './routes/attendance.js';
 import { createPayrollRoutes } from './routes/payroll.js';
 import { createRecruitmentRoutes } from './routes/recruitment.js';
+import { createPerformanceRoutes } from './routes/performance.js';
+import { createTrainingRoutes } from './routes/training.js';
+import { createDashboardRoutes } from './routes/dashboard.js';
+import { createNotificationRoutes } from './routes/notifications.js';
 import { createHealthRoutes } from './routes/health.js';
 
 // ============================================================================
@@ -104,6 +108,10 @@ app.route('/api/v1/leave-requests', createLeaveRoutes());
 app.route('/api/v1/attendance', createAttendanceRoutes());
 app.route('/api/v1/payroll', createPayrollRoutes());
 app.route('/api/v1/recruitment', createRecruitmentRoutes());
+app.route('/api/v1/performance', createPerformanceRoutes());
+app.route('/api/v1/training', createTrainingRoutes());
+app.route('/api/v1/dashboard', createDashboardRoutes());
+app.route('/api/v1/notifications', createNotificationRoutes());
 
 // 404 handler
 app.notFound((c) => {

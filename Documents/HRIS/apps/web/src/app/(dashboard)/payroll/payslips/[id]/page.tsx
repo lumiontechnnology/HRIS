@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { useParams } from 'next/navigation';
+import { useState } from 'react';
 import { useCurrentUser } from '@/lib/client-auth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Button } from '@lumion/ui';
 import Link from 'next/link';
@@ -36,6 +37,7 @@ export default function PayslipDetailPage(): JSX.Element {
   const params = useParams();
   const id = params.id as string;
   const { user } = useCurrentUser();
+  const [isSending, setIsSending] = useState(false);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['payslip', id],
@@ -57,6 +59,37 @@ export default function PayslipDetailPage(): JSX.Element {
   });
 
   const payslip = data?.data as Payslip | undefined;
+
+  const downloadDocument = async () => {
+    if (!user) return;
+
+    await fetch(`http://localhost:3001/api/v1/payroll/payslips/${id}/generate-pdf`, {
+      method: 'POST',
+      headers: {
+        'x-user-id': user.id,
+        'x-tenant-id': user.tenantId,
+      },
+    });
+
+    window.open(`http://localhost:3001/api/v1/payroll/payslips/${id}/pdf`, '_blank');
+  };
+
+  const sendPayslip = async () => {
+    if (!user) return;
+
+    setIsSending(true);
+    try {
+      await fetch(`http://localhost:3001/api/v1/payroll/payslips/${id}/send`, {
+        method: 'POST',
+        headers: {
+          'x-user-id': user.id,
+          'x-tenant-id': user.tenantId,
+        },
+      });
+    } finally {
+      setIsSending(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -107,11 +140,11 @@ export default function PayslipDetailPage(): JSX.Element {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline">
+          <Button variant="outline" onClick={() => void sendPayslip()} disabled={isSending}>
             <Mail className="mr-2 h-4 w-4" />
-            Email
+            {isSending ? 'Sending...' : 'Email'}
           </Button>
-          <Button>
+          <Button onClick={() => void downloadDocument()}>
             <Download className="mr-2 h-4 w-4" />
             Download
           </Button>
@@ -276,13 +309,13 @@ export default function PayslipDetailPage(): JSX.Element {
 
           {/* Actions */}
           <div className="space-y-2">
-            <Button className="w-full">
+            <Button className="w-full" onClick={() => void downloadDocument()}>
               <Download className="mr-2 h-4 w-4" />
               Download PDF
             </Button>
-            <Button variant="outline" className="w-full">
+            <Button variant="outline" className="w-full" onClick={() => void sendPayslip()} disabled={isSending}>
               <Mail className="mr-2 h-4 w-4" />
-              Send Email
+              {isSending ? 'Sending Email...' : 'Send Email'}
             </Button>
           </div>
         </div>

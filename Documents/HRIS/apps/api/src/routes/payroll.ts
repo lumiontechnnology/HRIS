@@ -107,6 +107,86 @@ function payslipStorageUrl(tenantId: string, payrollRunId: string, payslipId: st
   return `${storageBase.replace(/\/$/, '')}/storage/v1/object/public/payslips/${tenantId}/${payrollRunId}/${payslipId}.pdf`;
 }
 
+function formatNaira(value: number): string {
+  return `NGN ${value.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function buildPayslipHtml(payload: {
+  employeeName: string;
+  employeeEmail: string;
+  employeeId: string;
+  department?: string;
+  jobTitle?: string;
+  periodStart: Date;
+  periodEnd: Date;
+  grossPay: number;
+  deductions: number;
+  netPay: number;
+  taxDeduction: number;
+  pensionDeduction: number;
+  nhfDeduction: number;
+}): string {
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Payslip - ${payload.employeeName}</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 24px; color: #0f172a; }
+      .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; }
+      .title { font-size: 28px; font-weight: 700; margin: 0; }
+      .muted { color: #475569; font-size: 13px; }
+      .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-bottom: 24px; }
+      .card { border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; }
+      .label { font-size: 12px; text-transform: uppercase; color: #64748b; }
+      .value { font-size: 15px; font-weight: 600; margin-top: 4px; }
+      table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+      th, td { border: 1px solid #cbd5e1; padding: 10px; text-align: left; font-size: 14px; }
+      th { background: #f8fafc; }
+      .total { margin-top: 18px; border: 1px solid #16a34a; border-radius: 8px; padding: 12px; background: #f0fdf4; }
+      .net { font-size: 26px; font-weight: 700; color: #166534; }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <div>
+        <h1 class="title">Payroll Payslip</h1>
+        <p class="muted">Period: ${payload.periodStart.toLocaleDateString()} - ${payload.periodEnd.toLocaleDateString()}</p>
+      </div>
+      <div class="muted">Generated: ${new Date().toLocaleString()}</div>
+    </div>
+
+    <div class="grid">
+      <div class="card"><div class="label">Employee Name</div><div class="value">${payload.employeeName}</div></div>
+      <div class="card"><div class="label">Employee ID</div><div class="value">${payload.employeeId}</div></div>
+      <div class="card"><div class="label">Department</div><div class="value">${payload.department || '-'}</div></div>
+      <div class="card"><div class="label">Position</div><div class="value">${payload.jobTitle || '-'}</div></div>
+      <div class="card"><div class="label">Email</div><div class="value">${payload.employeeEmail}</div></div>
+      <div class="card"><div class="label">Currency</div><div class="value">NGN</div></div>
+    </div>
+
+    <table>
+      <thead>
+        <tr><th>Component</th><th>Amount</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Gross Pay</td><td>${formatNaira(payload.grossPay)}</td></tr>
+        <tr><td>PAYE Tax</td><td>-${formatNaira(payload.taxDeduction)}</td></tr>
+        <tr><td>Pension</td><td>-${formatNaira(payload.pensionDeduction)}</td></tr>
+        <tr><td>NHF</td><td>-${formatNaira(payload.nhfDeduction)}</td></tr>
+        <tr><td>Total Deductions</td><td>-${formatNaira(payload.deductions)}</td></tr>
+      </tbody>
+    </table>
+
+    <div class="total">
+      <div class="label">Net Salary</div>
+      <div class="net">${formatNaira(payload.netPay)}</div>
+    </div>
+  </body>
+</html>`;
+}
+
 export const createPayrollRoutes = (): Hono<Env> => {
   const app = new Hono<Env>();
 
@@ -735,7 +815,7 @@ export const createPayrollRoutes = (): Hono<Env> => {
 
   /**
    * POST /api/v1/payroll/payslips/:id/generate-pdf
-   * Generate and persist payslip PDF URL placeholder for storage retrieval
+   * Generate and persist payslip document URL for storage retrieval
    */
   app.post('/payslips/:id/generate-pdf', async (c) => {
     try {
@@ -751,7 +831,7 @@ export const createPayrollRoutes = (): Hono<Env> => {
         );
       }
 
-      const pdfUrl = payslipStorageUrl(tenantId, payslip.payrollRunId, payslip.id);
+      const pdfUrl = `/api/v1/payroll/payslips/${payslip.id}/pdf`;
       const updated = await prisma.payslip.update({
         where: { id },
         data: { pdfUrl },
@@ -768,6 +848,80 @@ export const createPayrollRoutes = (): Hono<Env> => {
       console.error('Error generating payslip PDF:', error);
       return c.json(
         { success: false, error: { code: 'UPDATE_ERROR', message: 'Failed to generate payslip PDF' } },
+        500
+      );
+    }
+  });
+
+  /**
+   * GET /api/v1/payroll/payslips/:id/pdf
+   * Render a printable payslip document
+   */
+  app.get('/payslips/:id/pdf', async (c) => {
+    try {
+      const id = c.req.param('id');
+      const tenantId = c.get('tenantId');
+
+      const payslip = await prisma.payslip.findUnique({
+        where: { id },
+        include: {
+          employee: {
+            select: {
+              firstName: true,
+              lastName: true,
+              email: true,
+              employeeId: true,
+              jobTitle: { select: { title: true } },
+              department: { select: { name: true } },
+            },
+          },
+          payrollRun: {
+            select: {
+              tenantId: true,
+              startDate: true,
+              endDate: true,
+            },
+          },
+        },
+      });
+
+      if (!payslip || payslip.payrollRun.tenantId !== tenantId) {
+        return c.json(
+          { success: false, error: { code: 'NOT_FOUND', message: 'Payslip not found' } },
+          404
+        );
+      }
+
+      const details = Array.isArray(payslip.deductionDetails) ? payslip.deductionDetails : [];
+      const amountFor = (component: string): number => {
+        const entry = (details as Array<{ component?: unknown; amount?: unknown }>).find(
+          (row) => String(row.component || '').toUpperCase() === component.toUpperCase()
+        );
+
+        return Number(entry?.amount || 0);
+      };
+
+      const html = buildPayslipHtml({
+        employeeName: `${payslip.employee.firstName} ${payslip.employee.lastName}`.trim(),
+        employeeEmail: payslip.employee.email,
+        employeeId: payslip.employee.employeeId,
+        department: payslip.employee.department?.name,
+        jobTitle: payslip.employee.jobTitle?.title,
+        periodStart: payslip.payrollRun.startDate,
+        periodEnd: payslip.payrollRun.endDate,
+        grossPay: Number(payslip.grossPay),
+        deductions: Number(payslip.deductions),
+        netPay: Number(payslip.netPay),
+        taxDeduction: amountFor('PAYE TAX'),
+        pensionDeduction: amountFor('PENSION'),
+        nhfDeduction: amountFor('NHF'),
+      });
+
+      return c.html(html);
+    } catch (error) {
+      console.error('Error rendering payslip document:', error);
+      return c.json(
+        { success: false, error: { code: 'FETCH_ERROR', message: 'Failed to render payslip document' } },
         500
       );
     }
@@ -793,6 +947,7 @@ export const createPayrollRoutes = (): Hono<Env> => {
       const updated = await prisma.payslip.update({
         where: { id },
         data: {
+          pdfUrl: payslip.pdfUrl || `/api/v1/payroll/payslips/${payslip.id}/pdf`,
           sentAt: new Date(),
         },
       });
