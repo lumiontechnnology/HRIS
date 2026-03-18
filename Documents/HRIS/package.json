@@ -41,6 +41,15 @@
     "typescript": "^5.3.3"
   },
   "dependencies": {},
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "prisma",
+      "esbuild",
+      "sharp"
+    ]
+  },
   "volta": {
     "node": "20.20.1"
   }
