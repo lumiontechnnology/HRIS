@@ -3,7 +3,7 @@ import { prisma } from '@lumion/database';
 import type { AppEnv } from '../index.js';
 
 export function createHealthRoutes(): Hono<AppEnv> {
-  const app = new Hono();
+  const app = new Hono<AppEnv>();
 
   // Basic health check
   app.get('/', (c) => {

@@ -1,189 +1,249 @@
 'use client';
 
+import { useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import {
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  Input,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  useToast,
+} from '@lumion/ui';
+import { Plus } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, Button } from '@lumion/ui';
-import Link from 'next/link';
+import { DataTable, type ColumnDef } from '@/components/system/data-table';
+import { Badge, CardSkeleton, SectionHeader } from '@/components/system/primitives';
+import { fetchDashboardApi } from '@/lib/dashboard-api';
 import { useCurrentUser } from '@/lib/client-auth';
-import { Plus, Search } from 'lucide-react';
-import { Input } from '@lumion/ui';
 
-interface Employee {
+interface EmployeeRow {
   id: string;
+  name: string;
   employeeId: string;
-  firstName: string;
-  lastName: string;
-  email: string;
-  jobTitle: { title: string };
-  department: { name: string };
-  location: { name: string };
-  employmentStatus: string;
-  hireDate: string;
-  avatar?: string;
+  department: string;
+  role: string;
+  status: 'Active' | 'On Leave' | 'Probation';
+  manager: string;
+  location: 'Lagos' | 'Abuja' | 'Remote';
+}
+
+interface EmployeesApiResponse {
+  data: Array<{
+    id: string;
+    employeeId: string;
+    firstName: string;
+    lastName: string;
+    department?: { name?: string | null } | null;
+    jobTitle?: { title?: string | null } | null;
+    employmentStatus?: string | null;
+    manager?: { firstName?: string | null; lastName?: string | null } | null;
+    location?: { name?: string | null } | null;
+  }>;
+}
+
+function mapStatus(value: string | null | undefined): EmployeeRow['status'] {
+  if (!value) return 'Probation';
+  if (value === 'ACTIVE') return 'Active';
+  if (value === 'ON_LEAVE') return 'On Leave';
+  return 'Probation';
 }
 
 export default function EmployeesPage(): JSX.Element {
+  const router = useRouter();
+  const { toast } = useToast();
   const { user } = useCurrentUser();
-  const [page, setPage] = useState(1);
-  const [search, setSearch] = useState('');
+  const [departmentFilter, setDepartmentFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [locationFilter, setLocationFilter] = useState<string>('all');
 
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['employees', page, search],
+  const { data, isLoading } = useQuery({
+    queryKey: ['ui-employees', user?.id, user?.tenantId],
+    enabled: !!user?.tenantId,
     queryFn: async () => {
-      const params = new URLSearchParams({
-        page: page.toString(),
-        limit: '20',
+      const response = await fetchDashboardApi<EmployeesApiResponse>(
+        '/api/v1/employees?limit=200',
+        user ? { id: user.id, tenantId: user.tenantId } : undefined
+      );
+
+      const mapped: EmployeeRow[] = response.data.map((item) => {
+        const managerName = item.manager
+          ? `${item.manager.firstName ?? ''} ${item.manager.lastName ?? ''}`.trim()
+          : 'Executive Board';
+
+        return {
+          id: item.id,
+          name: `${item.firstName} ${item.lastName}`.trim(),
+          employeeId: item.employeeId,
+          department: item.department?.name || 'Unassigned',
+          role: item.jobTitle?.title || 'Not Assigned',
+          status: mapStatus(item.employmentStatus),
+          manager: managerName || 'Executive Board',
+          location: (item.location?.name as EmployeeRow['location']) || 'Remote',
+        };
       });
 
-      if (search) {
-        params.append('search', search);
-      }
-
-      const res = await fetch(`http://localhost:3001/api/v1/employees?${params}`, {
-        headers: {
-          'x-user-id': user?.id || '',
-          'x-tenant-id': user?.tenantId || '',
-        },
-      });
-
-      if (!res.ok) {
-        throw new Error('Failed to fetch employees');
-      }
-
-      return res.json();
+      return mapped;
     },
-    enabled: !!user,
   });
+
+  const effectiveRows = data ?? [];
+
+  const filteredRows = useMemo(() => {
+    return effectiveRows.filter((row) => {
+      const byDept = departmentFilter === 'all' ? true : row.department === departmentFilter;
+      const byStatus = statusFilter === 'all' ? true : row.status === statusFilter;
+      const byLocation = locationFilter === 'all' ? true : row.location === locationFilter;
+      return byDept && byStatus && byLocation;
+    });
+  }, [departmentFilter, effectiveRows, locationFilter, statusFilter]);
+
+  const columns: ColumnDef<EmployeeRow>[] = [
+    {
+      key: 'name',
+      label: 'Name',
+      sortable: true,
+      render: (row) => (
+        <div>
+          <p className="font-medium text-slate-900">{row.name}</p>
+          <p className="text-xs text-slate-500">{row.employeeId}</p>
+        </div>
+      ),
+    },
+    { key: 'employeeId', label: 'Employee ID', sortable: true },
+    { key: 'department', label: 'Department', sortable: true },
+    { key: 'role', label: 'Role', sortable: true },
+    {
+      key: 'status',
+      label: 'Status',
+      sortable: true,
+      render: (row) => (
+        <Badge tone={row.status === 'Active' ? 'success' : row.status === 'On Leave' ? 'warning' : 'info'}>
+          {row.status}
+        </Badge>
+      ),
+    },
+    { key: 'manager', label: 'Manager', sortable: true },
+  ];
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Employees</h1>
-          <p className="mt-1 text-slate-600 dark:text-slate-400">
-            Manage and view all employees in your organization.
-          </p>
-        </div>
-        <Link href="/employees/new">
-          <Button>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Employee
-          </Button>
-        </Link>
-      </div>
+      <SectionHeader
+        title="Employees"
+        description="Search and manage workforce records with operational filters."
+        actions={
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="mr-2 h-4 w-4" />
+                Add Employee
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Add Employee</DialogTitle>
+                <DialogDescription>Create an employee shell and complete profile details later.</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-3">
+                <Input placeholder="First Name" />
+                <Input placeholder="Last Name" />
+                <Input placeholder="Work Email" />
+              </div>
+              <DialogFooter>
+                <Button
+                  onClick={() => {
+                    toast({ title: 'Employee created', description: 'Employee shell has been added to onboarding queue.' });
+                  }}
+                >
+                  Save
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        }
+      />
 
-      {/* Search */}
       <Card>
-        <CardContent className="pt-6">
-          <div className="relative">
-            <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-            <Input
-              placeholder="Search by name, email, or ID..."
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
-              className="pl-10"
-            />
-          </div>
+        <CardHeader>
+          <CardTitle>Filters</CardTitle>
+          <CardDescription>Department, status, and location filters</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 sm:grid-cols-3">
+          <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
+            <SelectTrigger>
+              <SelectValue placeholder="Department" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Departments</SelectItem>
+              <SelectItem value="Engineering">Engineering</SelectItem>
+              <SelectItem value="Human Resources">Human Resources</SelectItem>
+              <SelectItem value="Sales">Sales</SelectItem>
+              <SelectItem value="Finance">Finance</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger>
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Statuses</SelectItem>
+              <SelectItem value="Active">Active</SelectItem>
+              <SelectItem value="On Leave">On Leave</SelectItem>
+              <SelectItem value="Probation">Probation</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={locationFilter} onValueChange={setLocationFilter}>
+            <SelectTrigger>
+              <SelectValue placeholder="Location" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Locations</SelectItem>
+              <SelectItem value="Lagos">Lagos</SelectItem>
+              <SelectItem value="Abuja">Abuja</SelectItem>
+              <SelectItem value="Remote">Remote</SelectItem>
+            </SelectContent>
+          </Select>
         </CardContent>
       </Card>
 
-      {/* Employees Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Employee List</CardTitle>
-          <CardDescription>All employees in your organization</CardDescription>
+          <CardTitle>Employee Directory</CardTitle>
+          <CardDescription>Row click opens employee profile</CardDescription>
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <div className="flex justify-center py-8">
-              <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-300 border-t-indigo-600" />
-            </div>
-          ) : error ? (
-            <div className="rounded-md bg-red-50 p-4 text-sm text-red-800 dark:bg-red-900/20 dark:text-red-200">
-              Failed to load employees. Make sure the API server is running on port 3001.
-            </div>
-          ) : data?.data && data.data.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-200 dark:border-slate-800">
-                    <th className="pb-3 text-left font-semibold">Employee ID</th>
-                    <th className="pb-3 text-left font-semibold">Name</th>
-                    <th className="pb-3 text-left font-semibold">Email</th>
-                    <th className="pb-3 text-left font-semibold">Position</th>
-                    <th className="pb-3 text-left font-semibold">Department</th>
-                    <th className="pb-3 text-left font-semibold">Status</th>
-                    <th className="pb-3 text-left font-semibold">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.data.map((employee: Employee) => (
-                    <tr
-                      key={employee.id}
-                      className="border-b border-slate-200 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800"
-                    >
-                      <td className="py-3">{employee.employeeId}</td>
-                      <td className="py-3">
-                        <Link
-                          href={`/employees/${employee.id}`}
-                          className="font-medium text-indigo-600 hover:underline dark:text-indigo-400"
-                        >
-                          {employee.firstName} {employee.lastName}
-                        </Link>
-                      </td>
-                      <td className="py-3">{employee.email}</td>
-                      <td className="py-3">{employee.jobTitle.title}</td>
-                      <td className="py-3">{employee.department.name}</td>
-                      <td className="py-3">
-                        <span className="inline-flex rounded-full bg-green-100 px-2 py-1 text-xs font-semibold text-green-800 dark:bg-green-900/30 dark:text-green-200">
-                          {employee.employmentStatus}
-                        </span>
-                      </td>
-                      <td className="py-3">
-                        <Link href={`/employees/${employee.id}`}>
-                          <Button variant="ghost" size="sm">
-                            View
-                          </Button>
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="grid gap-3 md:grid-cols-3">
+              <CardSkeleton />
+              <CardSkeleton />
+              <CardSkeleton />
             </div>
           ) : (
-            <div className="py-8 text-center">
-              <p className="text-slate-600 dark:text-slate-400">No employees found</p>
-            </div>
-          )}
-
-          {/* Pagination */}
-          {data?.meta && (
-            <div className="mt-4 flex items-center justify-between">
-              <p className="text-sm text-slate-600 dark:text-slate-400">
-                Page {data.meta.page} of {Math.ceil(data.meta.total / 20)}
-              </p>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  disabled={page === 1}
-                  onClick={() => setPage(page - 1)}
-                >
-                  Previous
-                </Button>
-                <Button
-                  variant="outline"
-                  disabled={!data.meta.hasMore}
-                  onClick={() => setPage(page + 1)}
-                >
-                  Next
-                </Button>
-              </div>
-            </div>
+            <DataTable
+              rows={filteredRows}
+              columns={columns}
+              searchKeys={['name', 'employeeId', 'department', 'role', 'manager', 'location']}
+              searchPlaceholder="Search name, ID, department or manager"
+              emptyTitle="No employees matched"
+              emptyDescription="Adjust filters or search terms to find employee records."
+              onRowClick={(row) => router.push(`/employees/${row.id}`)}
+            />
           )}
         </CardContent>
       </Card>

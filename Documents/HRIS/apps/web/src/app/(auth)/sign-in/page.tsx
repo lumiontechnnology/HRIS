@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 
@@ -30,24 +30,29 @@ export default function SignInPage() {
       return;
     }
 
-    if (rememberMe) {
-      localStorage.setItem('rememberedEmail', email);
-    } else {
-      localStorage.removeItem('rememberedEmail');
+    if (typeof window !== 'undefined') {
+      if (rememberMe) {
+        localStorage.setItem('rememberedEmail', email);
+      } else {
+        localStorage.removeItem('rememberedEmail');
+      }
     }
 
     router.push('/');
     router.refresh();
   };
 
-  // Load remembered email on mount
-  useState(() => {
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
     const saved = localStorage.getItem('rememberedEmail');
     if (saved) {
       setEmail(saved);
       setRememberMe(true);
     }
-  });
+  }, []);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-slate-900 to-slate-800 p-4">

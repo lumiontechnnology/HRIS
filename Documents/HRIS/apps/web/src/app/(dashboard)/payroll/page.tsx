@@ -1,184 +1,232 @@
 'use client';
 
+import { useMemo } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@lumion/ui';
 import { useQuery } from '@tanstack/react-query';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, Button } from '@lumion/ui';
+import { DataTable, type ColumnDef } from '@/components/system/data-table';
+import { Badge, CardSkeleton, SectionHeader } from '@/components/system/primitives';
+import { fetchDashboardApi } from '@/lib/dashboard-api';
 import { useCurrentUser } from '@/lib/client-auth';
-import Link from 'next/link';
-import { DollarSign, Users, FileText, Calendar } from 'lucide-react';
+
+interface PayrollRow {
+  id: string;
+  employee: string;
+  baseSalary: number;
+  allowances: number;
+  deductions: number;
+  tax: number;
+  netPay: number;
+  state: 'Draft' | 'Processing' | 'Review' | 'Approved' | 'Disbursed';
+}
+
+function formatMoney(value: number): string {
+  return `NGN ${value.toLocaleString()}`;
+}
+
+interface PayrollSummaryResponse {
+  data: {
+    totalEmployees: number;
+    thisMonthPayroll: number;
+    lastMonthPayroll: number;
+    totalPayslips: number;
+    currentRunStatus: string;
+  };
+}
+
+interface PayrollPayslipsResponse {
+  data: Array<{
+    id: string;
+    grossPay: number;
+    deductions: number;
+    netPay: number;
+    earnings?: Array<{ component?: string; amount?: number }> | null;
+    deductionDetails?: Array<{ component?: string; amount?: number }> | null;
+    employee?: {
+      firstName?: string | null;
+      lastName?: string | null;
+    } | null;
+    payrollRun?: {
+      status?: string;
+    } | null;
+  }>;
+}
+
+function mapPayrollState(value: string | undefined): PayrollRow['state'] {
+  if (value === 'DISBURSED' || value === 'LOCKED') return 'Disbursed';
+  if (value === 'APPROVED') return 'Approved';
+  if (value === 'REVIEW') return 'Review';
+  if (value === 'PROCESSING') return 'Processing';
+  return 'Draft';
+}
 
 export default function PayrollPage(): JSX.Element {
   const { user } = useCurrentUser();
 
-  const { data } = useQuery({
-    queryKey: ['payroll-summary'],
+  const { data, isLoading } = useQuery({
+    queryKey: ['ui-payroll', user?.id, user?.tenantId],
+    enabled: !!user?.tenantId,
     queryFn: async () => {
-      const res = await fetch('http://localhost:3001/api/v1/payroll/summary', {
-        headers: {
-          'x-user-id': user?.id || '',
-          'x-tenant-id': user?.tenantId || '',
-        },
+      const [summaryResponse, payslipsResponse] = await Promise.all([
+        fetchDashboardApi<PayrollSummaryResponse>(
+          '/api/v1/payroll/summary',
+          user ? { id: user.id, tenantId: user.tenantId } : undefined
+        ),
+        fetchDashboardApi<PayrollPayslipsResponse>(
+          '/api/v1/payroll/payslips?limit=200',
+          user ? { id: user.id, tenantId: user.tenantId } : undefined
+        ),
+      ]);
+
+      const rows: PayrollRow[] = payslipsResponse.data.map((item) => {
+        const allowances = (item.earnings || []).reduce((sum, earning) => {
+          const label = (earning.component || '').toLowerCase();
+          const amount = Number(earning.amount || 0);
+          return label.includes('basic') ? sum : sum + amount;
+        }, 0);
+
+        const tax = (item.deductionDetails || []).reduce((sum, detail) => {
+          const label = (detail.component || '').toLowerCase();
+          const amount = Number(detail.amount || 0);
+          return label.includes('tax') ? sum + amount : sum;
+        }, 0);
+
+        return {
+          id: item.id,
+          employee:
+            `${item.employee?.firstName ?? ''} ${item.employee?.lastName ?? ''}`.trim() ||
+            'Unknown Employee',
+          baseSalary: Number(item.grossPay || 0),
+          allowances,
+          deductions: Number(item.deductions || 0),
+          tax,
+          netPay: Number(item.netPay || 0),
+          state: mapPayrollState(item.payrollRun?.status),
+        };
       });
 
-      if (!res.ok) {
-        throw new Error('Failed to fetch summary');
-      }
-
-      return res.json();
+      return {
+        summary: summaryResponse.data,
+        rows,
+      };
     },
-    enabled: !!user,
   });
 
-  const summary = data?.data || {};
+  const effectiveRows = data?.rows ?? [];
 
-  const statusColors = {
-    DRAFT: 'bg-slate-100 text-slate-800 dark:bg-slate-900/30 dark:text-slate-200',
-    GENERATED: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-200',
-    APPROVED: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200',
-    PROCESSING: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-200',
-    PAID: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200',
-    NO_RUN: 'bg-slate-100 text-slate-800 dark:bg-slate-900/30 dark:text-slate-200',
-  };
+  const columns: ColumnDef<PayrollRow>[] = [
+    { key: 'employee', label: 'Employee', sortable: true },
+    { key: 'baseSalary', label: 'Base Salary', sortable: true, render: (row) => formatMoney(row.baseSalary) },
+    { key: 'allowances', label: 'Allowances', sortable: true, render: (row) => formatMoney(row.allowances) },
+    { key: 'deductions', label: 'Deductions', sortable: true, render: (row) => formatMoney(row.deductions) },
+    { key: 'tax', label: 'Tax', sortable: true, render: (row) => formatMoney(row.tax) },
+    { key: 'netPay', label: 'Net Pay', sortable: true, render: (row) => formatMoney(row.netPay) },
+    {
+      key: 'state',
+      label: 'Workflow State',
+      sortable: true,
+      render: (row) => (
+        <Badge
+          tone={
+            row.state === 'Disbursed'
+              ? 'success'
+              : row.state === 'Approved'
+                ? 'info'
+                : row.state === 'Review'
+                  ? 'warning'
+                  : 'neutral'
+          }
+        >
+          {row.state}
+        </Badge>
+      ),
+    },
+  ];
+
+  const totals = useMemo(() => {
+    const totalTax = effectiveRows.reduce((sum, row) => sum + row.tax, 0);
+    const totalDeductions = effectiveRows.reduce((sum, row) => sum + row.deductions, 0);
+
+    return {
+      totalPayroll: data?.summary?.thisMonthPayroll ?? effectiveRows.reduce((sum, row) => sum + row.netPay, 0),
+      totalTax,
+      totalDeductions,
+    };
+  }, [data?.summary?.thisMonthPayroll, effectiveRows]);
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Payroll</h1>
-          <p className="mt-1 text-slate-600 dark:text-slate-400">
-            Manage salary runs and employee payslips.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Link href="/payroll/payslips">
-            <Button variant="outline">
-              <FileText className="mr-2 h-4 w-4" />
-              View Payslips
-            </Button>
-          </Link>
-          <Link href="/payroll/runs/new">
-            <Button>
-              <Calendar className="mr-2 h-4 w-4" />
-              New Payroll Run
-            </Button>
-          </Link>
-        </div>
-      </div>
+      <SectionHeader
+        title="Payroll"
+        description="Financially accurate payroll operations with controlled state transitions."
+      />
 
-      {/* KPI Cards */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-3">
         <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-sm">
-              <Users className="h-4 w-4" />
-              Active Employees
-            </CardTitle>
+          <CardHeader className="pb-2">
+            <CardDescription>Total Payroll</CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold">{summary.totalEmployees || 0}</p>
-            <p className="text-xs text-slate-600 dark:text-slate-400">in organization</p>
+            <p className="text-2xl font-semibold">{formatMoney(totals.totalPayroll)}</p>
           </CardContent>
         </Card>
-
         <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-sm">
-              <DollarSign className="h-4 w-4" />
-              This Month
-            </CardTitle>
+          <CardHeader className="pb-2">
+            <CardDescription>Total Tax</CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold">₦{(summary.thisMonthPayroll / 1000000).toFixed(1)}M</p>
-            <p className="text-xs text-slate-600 dark:text-slate-400">payroll total</p>
+            <p className="text-2xl font-semibold">{formatMoney(totals.totalTax)}</p>
           </CardContent>
         </Card>
-
         <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-sm">
-              <DollarSign className="h-4 w-4" />
-              Last Month
-            </CardTitle>
+          <CardHeader className="pb-2">
+            <CardDescription>Total Deductions</CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold">₦{(summary.lastMonthPayroll / 1000000).toFixed(1)}M</p>
-            <p className="text-xs text-slate-600 dark:text-slate-400">payroll total</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-sm">
-              <FileText className="h-4 w-4" />
-              Payslips Generated
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold">{summary.totalPayslips || 0}</p>
-            <p className="text-xs text-slate-600 dark:text-slate-400">all time</p>
+            <p className="text-2xl font-semibold">{formatMoney(totals.totalDeductions)}</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Current Run Status */}
       <Card>
         <CardHeader>
-          <CardTitle>Current Month Status</CardTitle>
-          <CardDescription>This month's payroll run</CardDescription>
+          <CardTitle>Payroll Workflow</CardTitle>
+          <CardDescription>Draft → Processing → Review → Approved → Disbursed</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-600 dark:text-slate-400">Status</p>
-                <span
-                  className={`mt-1 inline-block rounded-full px-3 py-1 font-semibold ${statusColors[summary.currentRunStatus as keyof typeof statusColors] || statusColors.NO_RUN}`}
-                >
-                  {summary.currentRunStatus === 'NO_RUN' ? 'No Active Run' : summary.currentRunStatus}
-                </span>
+          <div className="grid gap-2 text-center text-xs font-semibold uppercase tracking-wide text-slate-600 md:grid-cols-5">
+            {['Draft', 'Processing', 'Review', 'Approved', 'Disbursed'].map((state) => (
+              <div key={state} className="rounded border border-slate-200 bg-slate-50 px-2 py-2">
+                {state}
               </div>
-              <Link href="/payroll/runs">
-                <Button variant="outline">View All Runs</Button>
-              </Link>
-            </div>
+            ))}
           </div>
         </CardContent>
       </Card>
 
-      {/* Quick Actions */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Recent Payslips</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
-              Quick access to recently generated payslips.
-            </p>
-            <Link href="/payroll/payslips">
-              <Button variant="outline" className="w-full">
-                Browse All Payslips
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Payroll Runs</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
-              Manage all payroll runs and their status.
-            </p>
-            <Link href="/payroll/runs">
-              <Button variant="outline" className="w-full">
-                View All Runs
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Payroll Register</CardTitle>
+          <CardDescription>Sortable and filterable payroll detail table</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="grid gap-3 md:grid-cols-3">
+              <CardSkeleton />
+              <CardSkeleton />
+              <CardSkeleton />
+            </div>
+          ) : (
+            <DataTable
+              rows={effectiveRows}
+              columns={columns}
+              searchKeys={['employee', 'state']}
+              searchPlaceholder="Search employee or workflow state"
+              emptyTitle="No payroll rows"
+              emptyDescription="Generate payroll rows to start this cycle."
+            />
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

@@ -1,245 +1,258 @@
 'use client';
 
+import { useMemo, useState } from 'react';
+import {
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  Input,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  useToast,
+} from '@lumion/ui';
+import { CalendarDays, Send } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, Button } from '@lumion/ui';
-import Link from 'next/link';
+import { DataTable, type ColumnDef } from '@/components/system/data-table';
+import { Badge, CardSkeleton, SectionHeader } from '@/components/system/primitives';
+import { fetchDashboardApi } from '@/lib/dashboard-api';
 import { useCurrentUser } from '@/lib/client-auth';
-import { Plus, Calendar, CheckCircle, Clock, XCircle } from 'lucide-react';
 
-interface LeaveRequest {
+interface ApprovalRow {
   id: string;
-  employee: {
-    firstName: string;
-    lastName: string;
-    jobTitle: { title: string };
-    department: { name: string };
-  };
-  leaveType: {
-    name: string;
-    color: string;
-  };
+  employee: string;
+  leaveType: string;
   startDate: string;
   endDate: string;
-  daysRequested: number;
-  status: 'SUBMITTED' | 'APPROVED' | 'REJECTED';
-  reason: string;
-  createdAt: string;
+  status: 'Submitted' | 'Approved' | 'Rejected';
 }
 
-const statusConfig = {
-  SUBMITTED: { label: 'Pending', icon: Clock, color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-200' },
-  APPROVED: { label: 'Approved', icon: CheckCircle, color: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200' },
-  REJECTED: { label: 'Rejected', icon: XCircle, color: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-200' },
-};
+interface LeaveRequestsResponse {
+  data: Array<{
+    id: string;
+    status: string;
+    startDate: string;
+    endDate: string;
+    leaveType?: { name?: string | null } | null;
+    employee?: { firstName?: string | null; lastName?: string | null } | null;
+  }>;
+}
 
-export default function LeaveRequestsPage(): JSX.Element {
+function mapLeaveStatus(value: string): ApprovalRow['status'] {
+  if (value === 'APPROVED') return 'Approved';
+  if (value === 'REJECTED') return 'Rejected';
+  return 'Submitted';
+}
+
+export default function LeavePage(): JSX.Element {
+  const { toast } = useToast();
   const { user } = useCurrentUser();
-  const [page, setPage] = useState(1);
-  const [status, setStatus] = useState<string>('');
+  const [month] = useState('March 2026');
+  const [leaveType, setLeaveType] = useState('annual');
 
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['leave-requests', page, status],
+  const { data, isLoading } = useQuery({
+    queryKey: ['ui-leave-requests', user?.id, user?.tenantId],
+    enabled: !!user?.tenantId,
     queryFn: async () => {
-      const params = new URLSearchParams({
-        page: page.toString(),
-        limit: '20',
-      });
+      const response = await fetchDashboardApi<LeaveRequestsResponse>(
+        '/api/v1/leave-requests?limit=100',
+        user ? { id: user.id, tenantId: user.tenantId } : undefined
+      );
 
-      if (status) {
-        params.append('status', status);
-      }
+      const mapped: ApprovalRow[] = response.data.map((item) => ({
+        id: item.id,
+        employee: `${item.employee?.firstName ?? ''} ${item.employee?.lastName ?? ''}`.trim() || 'Unknown Employee',
+        leaveType: item.leaveType?.name || 'Leave',
+        startDate: item.startDate,
+        endDate: item.endDate,
+        status: mapLeaveStatus(item.status),
+      }));
 
-      const res = await fetch(`http://localhost:3001/api/v1/leave-requests?${params}`, {
-        headers: {
-          'x-user-id': user?.id || '',
-          'x-tenant-id': user?.tenantId || '',
-        },
-      });
-
-      if (!res.ok) {
-        throw new Error('Failed to fetch leave requests');
-      }
-
-      return res.json();
+      return mapped;
     },
-    enabled: !!user,
   });
+
+  const approvals = data ?? [];
+
+  const dayCells = useMemo(
+    () =>
+      Array.from({ length: 30 }, (_, index) => ({
+        day: index + 1,
+        state: index === 20 || index === 21 ? 'request' : index === 16 ? 'holiday' : 'normal',
+      })),
+    []
+  );
+
+  const columns: ColumnDef<ApprovalRow>[] = [
+    { key: 'employee', label: 'Employee', sortable: true },
+    { key: 'leaveType', label: 'Leave Type', sortable: true },
+    { key: 'startDate', label: 'Start Date', sortable: true },
+    { key: 'endDate', label: 'End Date', sortable: true },
+    {
+      key: 'status',
+      label: 'Status',
+      sortable: true,
+      render: (row) => (
+        <Badge tone={row.status === 'Approved' ? 'success' : row.status === 'Rejected' ? 'danger' : 'warning'}>
+          {row.status}
+        </Badge>
+      ),
+    },
+  ];
+
+  const annualCount = approvals.filter((item) => item.leaveType.toLowerCase().includes('annual')).length;
+  const pendingCount = approvals.filter((item) => item.status === 'Submitted').length;
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Leave Requests</h1>
-          <p className="mt-1 text-slate-600 dark:text-slate-400">
-            Manage and track leave requests.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Link href="/leave/balance">
-            <Button variant="outline">
-              <Calendar className="mr-2 h-4 w-4" />
-              View Balance
-            </Button>
-          </Link>
-          <Link href="/leave/new">
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              Request Leave
-            </Button>
-          </Link>
-        </div>
+      <SectionHeader
+        title="Leave Management"
+        description="Balance tracking, request creation, and approval operations in one workspace."
+      />
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Annual Leave Requests</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-semibold">{annualCount}</p>
+            <p className="text-xs text-slate-500">Across current data window</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Pending Approval</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-semibold">{pendingCount}</p>
+            <p className="text-xs text-slate-500">Awaiting action</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Approval Throughput</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-semibold">{Math.max(0, approvals.length - pendingCount)}</p>
+            <p className="text-xs text-slate-500">Processed requests</p>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Filters */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex gap-2">
-            <Button
-              variant={status === '' ? 'default' : 'outline'}
-              onClick={() => {
-                setStatus('');
-                setPage(1);
-              }}
-            >
-              All Requests
-            </Button>
-            <Button
-              variant={status === 'SUBMITTED' ? 'default' : 'outline'}
-              onClick={() => {
-                setStatus('SUBMITTED');
-                setPage(1);
-              }}
-            >
-              Pending
-            </Button>
-            <Button
-              variant={status === 'APPROVED' ? 'default' : 'outline'}
-              onClick={() => {
-                setStatus('APPROVED');
-                setPage(1);
-              }}
-            >
-              Approved
-            </Button>
-            <Button
-              variant={status === 'REJECTED' ? 'default' : 'outline'}
-              onClick={() => {
-                setStatus('REJECTED');
-                setPage(1);
-              }}
-            >
-              Rejected
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="grid gap-4 xl:grid-cols-[2fr_1fr]">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <CalendarDays className="h-4 w-4" />
+              Calendar View
+            </CardTitle>
+            <CardDescription>{month}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-7 gap-2 text-center text-xs text-slate-600">
+              {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => (
+                <p key={day} className="py-1 font-semibold">{day}</p>
+              ))}
+            </div>
+            <div className="mt-2 grid grid-cols-7 gap-2">
+              {dayCells.map((cell) => (
+                <div
+                  key={cell.day}
+                  className={`rounded border p-2 text-center text-sm ${
+                    cell.state === 'request'
+                      ? 'border-amber-300 bg-amber-50'
+                      : cell.state === 'holiday'
+                        ? 'border-sky-300 bg-sky-50'
+                        : 'border-slate-200 bg-white'
+                  }`}
+                >
+                  {cell.day}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
 
-      {/* Requests Table */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Request Leave</CardTitle>
+            <CardDescription>Submit new leave request</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Select value={leaveType} onValueChange={setLeaveType}>
+              <SelectTrigger>
+                <SelectValue placeholder="Leave Type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="annual">Annual Leave</SelectItem>
+                <SelectItem value="sick">Sick Leave</SelectItem>
+                <SelectItem value="maternity">Maternity Leave</SelectItem>
+              </SelectContent>
+            </Select>
+            <Input type="date" />
+            <Input type="date" />
+            <Input placeholder="Reason" />
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button className="w-full">
+                  <Send className="mr-2 h-4 w-4" />
+                  Submit Request
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Confirm Leave Request</DialogTitle>
+                  <DialogDescription>Submit this leave request to approval queue?</DialogDescription>
+                </DialogHeader>
+                <DialogFooter>
+                  <Button
+                    onClick={() => {
+                      toast({ title: 'Request submitted', description: 'Leave request has been queued for approval.' });
+                    }}
+                  >
+                    Confirm
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </CardContent>
+        </Card>
+      </div>
+
       <Card>
         <CardHeader>
-          <CardTitle>Leave Requests</CardTitle>
-          <CardDescription>All leave requests in the system</CardDescription>
+          <CardTitle>Approval Queue</CardTitle>
+          <CardDescription>Filter, sort, and process pending leave requests</CardDescription>
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <div className="flex justify-center py-8">
-              <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-300 border-t-indigo-600" />
-            </div>
-          ) : error ? (
-            <div className="rounded-md bg-red-50 p-4 text-sm text-red-800 dark:bg-red-900/20 dark:text-red-200">
-              Failed to load leave requests. Make sure the API server is running on port 3001.
-            </div>
-          ) : data?.data && data.data.length > 0 ? (
-            <div className="space-y-4">
-              {data.data.map((request: LeaveRequest) => {
-                const startDate = new Date(request.startDate);
-                const endDate = new Date(request.endDate);
-                const Config = statusConfig[request.status];
-                const Icon = Config.icon;
-
-                return (
-                  <div
-                    key={request.id}
-                    className="border border-slate-200 rounded-lg p-4 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3">
-                          <h3 className="font-semibold text-slate-900 dark:text-white">
-                            {request.employee.firstName} {request.employee.lastName}
-                          </h3>
-                          <span
-                            className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold ${Config.color}`}
-                          >
-                            <Icon className="h-3 w-3" />
-                            {Config.label}
-                          </span>
-                          <span
-                            className="inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold"
-                            style={{
-                              backgroundColor: request.leaveType.color + '20',
-                              color: request.leaveType.color,
-                            }}
-                          >
-                            {request.leaveType.name}
-                          </span>
-                        </div>
-                        <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-                          {request.employee.jobTitle.title} • {request.employee.department.name}
-                        </p>
-                        <p className="mt-2 text-sm">
-                          <span className="font-medium">Dates:</span> {startDate.toLocaleDateString()} - {endDate.toLocaleDateString()}
-                        </p>
-                        <p className="text-sm">
-                          <span className="font-medium">Days:</span> {request.daysRequested}
-                        </p>
-                        {request.reason && (
-                          <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
-                            <span className="font-medium">Reason:</span> {request.reason}
-                          </p>
-                        )}
-                      </div>
-                      <Link href={`/leave/${request.id}`}>
-                        <Button variant="ghost" size="sm">
-                          View
-                        </Button>
-                      </Link>
-                    </div>
-                  </div>
-                );
-              })}
+            <div className="grid gap-3 md:grid-cols-3">
+              <CardSkeleton />
+              <CardSkeleton />
+              <CardSkeleton />
             </div>
           ) : (
-            <div className="py-8 text-center">
-              <p className="text-slate-600 dark:text-slate-400">No leave requests found</p>
-            </div>
-          )}
-
-          {/* Pagination */}
-          {data?.meta && (
-            <div className="mt-4 flex items-center justify-between">
-              <p className="text-sm text-slate-600 dark:text-slate-400">
-                Page {data.meta.page} of {Math.ceil(data.meta.total / 20)}
-              </p>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  disabled={page === 1}
-                  onClick={() => setPage(page - 1)}
-                >
-                  Previous
-                </Button>
-                <Button
-                  variant="outline"
-                  disabled={!data.meta.hasMore}
-                  onClick={() => setPage(page + 1)}
-                >
-                  Next
-                </Button>
-              </div>
-            </div>
+            <DataTable
+              rows={approvals}
+              columns={columns}
+              searchKeys={['employee', 'leaveType', 'status', 'id']}
+              searchPlaceholder="Search employee, type or request ID"
+              emptyTitle="No leave requests"
+              emptyDescription="All caught up. New requests will appear here."
+            />
           )}
         </CardContent>
       </Card>

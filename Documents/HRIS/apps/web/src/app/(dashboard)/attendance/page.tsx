@@ -1,319 +1,194 @@
 'use client';
 
-import { useQuery, useMutation } from '@tanstack/react-query';
-import { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, Button, useToast } from '@lumion/ui';
+import { useMemo, useState } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@lumion/ui';
+import { useQuery } from '@tanstack/react-query';
+import { DataTable, type ColumnDef } from '@/components/system/data-table';
+import { Badge, CardSkeleton, SectionHeader } from '@/components/system/primitives';
+import { fetchDashboardApi } from '@/lib/dashboard-api';
 import { useCurrentUser } from '@/lib/client-auth';
-import { Clock, LogIn, LogOut, Calendar } from 'lucide-react';
-import Link from 'next/link';
 
-interface AttendanceRecord {
+interface AttendanceRow {
   id: string;
+  employee: string;
   date: string;
-  clockInTime: string;
-  clockOutTime?: string;
-  status: 'PRESENT' | 'ABSENT' | 'LATE' | 'EARLY_DEPARTURE' | 'ON_LEAVE';
-  hoursWorked?: number;
+  clockIn: string;
+  clockOut: string;
+  status: 'Present' | 'Late' | 'On Leave' | 'Absent' | 'Early Departure';
+}
+
+interface AttendanceApiResponse {
+  data: Array<{
+    id: string;
+    date: string;
+    clockIn: string | null;
+    clockOut: string | null;
+    status: string;
+    employee?: {
+      firstName?: string | null;
+      lastName?: string | null;
+    } | null;
+  }>;
+}
+
+function mapAttendanceStatus(value: string): AttendanceRow['status'] {
+  if (value === 'LATE') return 'Late';
+  if (value === 'ON_LEAVE') return 'On Leave';
+  if (value === 'ABSENT') return 'Absent';
+  if (value === 'EARLY_DEPARTURE') return 'Early Departure';
+  return 'Present';
+}
+
+function formatTime(value: string | null): string {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatDate(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toISOString().slice(0, 10);
 }
 
 export default function AttendancePage(): JSX.Element {
   const { user } = useCurrentUser();
-  const { toast } = useToast();
-  const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
 
-  // Find current employee
-  const { data: employeeData } = useQuery({
-    queryKey: ['current-employee'],
+  const { data, isLoading } = useQuery({
+    queryKey: ['ui-attendance', user?.id, user?.tenantId],
+    enabled: !!user?.tenantId,
     queryFn: async () => {
-      const res = await fetch(`http://localhost:3001/api/v1/employees?limit=1`, {
-        headers: {
-          'x-user-id': user?.id || '',
-          'x-tenant-id': user?.tenantId || '',
-        },
-      });
-
-      if (!res.ok) {
-        throw new Error('Failed to fetch employee');
-      }
-
-      const data = await res.json();
-      const emp = data.data?.[0];
-      if (emp) setSelectedEmployeeId(emp.id);
-      return emp;
-    },
-    enabled: !!user,
-  });
-
-  // Fetch today's attendance
-  const { data: todayData, refetch } = useQuery({
-    queryKey: ['today-attendance', selectedEmployeeId],
-    queryFn: async () => {
-      if (!selectedEmployeeId) return null;
-
-      const today = new Date();
-      const dateStr = today.toISOString().split('T')[0];
-
-      const res = await fetch(
-        `http://localhost:3001/api/v1/attendance?employeeId=${selectedEmployeeId}&startDate=${dateStr}&endDate=${dateStr}`,
-        {
-          headers: {
-            'x-user-id': user?.id || '',
-            'x-tenant-id': user?.tenantId || '',
-          },
-        }
+      const response = await fetchDashboardApi<AttendanceApiResponse>(
+        '/api/v1/attendance?limit=100',
+        user ? { id: user.id, tenantId: user.tenantId } : undefined
       );
 
-      if (!res.ok) {
-        throw new Error('Failed to fetch attendance');
-      }
+      const mapped: AttendanceRow[] = response.data.map((record) => ({
+        id: record.id,
+        employee:
+          `${record.employee?.firstName ?? ''} ${record.employee?.lastName ?? ''}`.trim() ||
+          'Unknown Employee',
+        date: formatDate(record.date),
+        clockIn: formatTime(record.clockIn),
+        clockOut: formatTime(record.clockOut),
+        status: mapAttendanceStatus(record.status),
+      }));
 
-      return res.json();
-    },
-    enabled: !!user && !!selectedEmployeeId,
-  });
-
-  const todayRecord = todayData?.data?.[0] as AttendanceRecord | undefined;
-
-  // Clock in mutation
-  const clockInMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch('http://localhost:3001/api/v1/attendance/clock-in', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-user-id': user?.id || '',
-          'x-tenant-id': user?.tenantId || '',
-        },
-        body: JSON.stringify({
-          employeeId: selectedEmployeeId,
-        }),
-      });
-
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error?.message || 'Failed to clock in');
-      }
-
-      return res.json();
-    },
-    onSuccess: () => {
-      toast({
-        title: 'Success',
-        description: 'Clocked in successfully',
-      });
-      refetch();
-    },
-    onError: (error) => {
-      toast({
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to clock in',
-        variant: 'destructive',
-      });
+      return mapped;
     },
   });
 
-  // Clock out mutation
-  const clockOutMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch('http://localhost:3001/api/v1/attendance/clock-out', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-user-id': user?.id || '',
-          'x-tenant-id': user?.tenantId || '',
-        },
-        body: JSON.stringify({
-          employeeId: selectedEmployeeId,
-        }),
-      });
+  const effectiveRows = data ?? [];
 
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error?.message || 'Failed to clock out');
-      }
+  const rows = useMemo(
+    () => effectiveRows.filter((row) => (statusFilter === 'all' ? true : row.status === statusFilter)),
+    [effectiveRows, statusFilter]
+  );
 
-      return res.json();
-    },
-    onSuccess: () => {
-      toast({
-        title: 'Success',
-        description: 'Clocked out successfully',
-      });
-      refetch();
-    },
-    onError: (error) => {
-      toast({
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to clock out',
-        variant: 'destructive',
-      });
-    },
-  });
+  const presentCount = effectiveRows.filter((row) => row.status === 'Present').length;
+  const lateCount = effectiveRows.filter((row) => row.status === 'Late' || row.status === 'Early Departure').length;
+  const onLeaveCount = effectiveRows.filter((row) => row.status === 'On Leave').length;
 
-  const statusColors = {
-    PRESENT: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200',
-    LATE: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-200',
-    ABSENT: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-200',
-    EARLY_DEPARTURE: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-200',
-    ON_LEAVE: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-200',
-  };
+  const columns: ColumnDef<AttendanceRow>[] = [
+    { key: 'employee', label: 'Employee', sortable: true },
+    { key: 'date', label: 'Date', sortable: true },
+    { key: 'clockIn', label: 'Clock In', sortable: true },
+    { key: 'clockOut', label: 'Clock Out', sortable: true },
+    {
+      key: 'status',
+      label: 'Status',
+      sortable: true,
+      render: (row) => (
+        <Badge
+          tone={
+            row.status === 'Present'
+              ? 'success'
+              : row.status === 'Late' || row.status === 'Early Departure'
+                ? 'warning'
+                : row.status === 'Absent'
+                  ? 'danger'
+                  : 'info'
+          }
+        >
+          {row.status}
+        </Badge>
+      ),
+    },
+  ];
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Attendance</h1>
-          <p className="mt-1 text-slate-600 dark:text-slate-400">
-            Clock in/out and track your attendance.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Link href="/attendance/history">
-            <Button variant="outline">
-              <Calendar className="mr-2 h-4 w-4" />
-              History
-            </Button>
-          </Link>
-          <Link href="/attendance/reports">
-            <Button variant="outline">
-              <Calendar className="mr-2 h-4 w-4" />
-              Reports
-            </Button>
-          </Link>
-        </div>
+      <SectionHeader title="Attendance" description="Monitor daily attendance and punctuality in real time." />
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Present Today</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-semibold">{presentCount}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Late Arrivals</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-semibold">{lateCount}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>On Leave</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-semibold">{onLeaveCount}</p>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Today's Status */}
       <Card>
         <CardHeader>
-          <CardTitle>Today's Status</CardTitle>
-          <CardDescription>{new Date().toLocaleDateString()}</CardDescription>
+          <CardTitle>Attendance Register</CardTitle>
+          <CardDescription>Sortable, searchable daily attendance log</CardDescription>
         </CardHeader>
-        <CardContent>
-          {todayRecord ? (
-            <div className="space-y-6">
-              {/* Status Badge */}
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-slate-600 dark:text-slate-400">Status</p>
-                  <span
-                    className={`mt-1 inline-block rounded-full px-3 py-1 font-semibold ${statusColors[todayRecord.status]}`}
-                  >
-                    {todayRecord.status}
-                  </span>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm text-slate-600 dark:text-slate-400">
-                    Hours Worked
-                  </p>
-                  <p className="text-2xl font-bold text-indigo-600">
-                    {todayRecord.hoursWorked ? todayRecord.hoursWorked.toFixed(1) : '—'}
-                  </p>
-                </div>
-              </div>
+        <CardContent className="space-y-4">
+          <div className="max-w-[220px]">
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger>
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="Present">Present</SelectItem>
+                <SelectItem value="Late">Late</SelectItem>
+                <SelectItem value="On Leave">On Leave</SelectItem>
+                <SelectItem value="Absent">Absent</SelectItem>
+                <SelectItem value="Early Departure">Early Departure</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
-              {/* Clock Times */}
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-800">
-                  <div className="flex items-center gap-2">
-                    <LogIn className="h-5 w-5 text-green-600" />
-                    <span className="font-medium">Clock In</span>
-                  </div>
-                  <p className="mt-2 text-2xl font-bold">
-                    {new Date(todayRecord.clockInTime).toLocaleTimeString([], {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </p>
-                </div>
-
-                {todayRecord.clockOutTime ? (
-                  <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-800">
-                    <div className="flex items-center gap-2">
-                      <LogOut className="h-5 w-5 text-red-600" />
-                      <span className="font-medium">Clock Out</span>
-                    </div>
-                    <p className="mt-2 text-2xl font-bold">
-                      {new Date(todayRecord.clockOutTime).toLocaleTimeString([], {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="rounded-lg border-2 border-dashed border-slate-300 p-4 dark:border-slate-700">
-                    <div className="flex items-center gap-2">
-                      <LogOut className="h-5 w-5 text-slate-400" />
-                      <span className="font-medium text-slate-500">Not Clocked Out</span>
-                    </div>
-                    <p className="mt-2 text-slate-400">Waiting for clock out...</p>
-                  </div>
-                )}
-              </div>
-
-              {/* Actions */}
-              {!todayRecord.clockOutTime && (
-                <Button
-                  onClick={() => clockOutMutation.mutate()}
-                  disabled={clockOutMutation.isPending}
-                  className="w-full"
-                  size="lg"
-                >
-                  <LogOut className="mr-2 h-5 w-5" />
-                  {clockOutMutation.isPending ? 'Clocking Out...' : 'Clock Out Now'}
-                </Button>
-              )}
+          {isLoading ? (
+            <div className="grid gap-3 md:grid-cols-3">
+              <CardSkeleton />
+              <CardSkeleton />
+              <CardSkeleton />
             </div>
           ) : (
-            <div className="space-y-4">
-              <p className="text-slate-600 dark:text-slate-400">You haven't clocked in yet.</p>
-              <Button
-                onClick={() => clockInMutation.mutate()}
-                disabled={clockInMutation.isPending}
-                className="w-full"
-                size="lg"
-              >
-                <LogIn className="mr-2 h-5 w-5" />
-                {clockInMutation.isPending ? 'Clocking In...' : 'Clock In Now'}
-              </Button>
-            </div>
+            <DataTable
+              rows={rows}
+              columns={columns}
+              searchKeys={['employee', 'status', 'date']}
+              searchPlaceholder="Search attendance records"
+              emptyTitle="No attendance records"
+              emptyDescription="No records found for selected filters."
+            />
           )}
         </CardContent>
       </Card>
-
-      {/* Quick Stats */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm">This Week</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold">38.5h</p>
-            <p className="text-xs text-slate-600 dark:text-slate-400">hours worked</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm">This Month</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold">21/21</p>
-            <p className="text-xs text-slate-600 dark:text-slate-400">days present</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm">Attendance Rate</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold text-green-600">100%</p>
-            <p className="text-xs text-slate-600 dark:text-slate-400">on track</p>
-          </CardContent>
-        </Card>
-      </div>
     </div>
   );
 }

@@ -1,5 +1,4 @@
 import { PrismaClient } from '@prisma/client';
-import { hash } from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
@@ -135,8 +134,8 @@ async function main(): Promise<void> {
     where: { email: 'admin@lumiontech.com' },
     update: {},
     create: {
+      authUserId: 'auth_admin_lumion',
       email: 'admin@lumiontech.com',
-      password: await hash('Admin@123456', 12),
       firstName: 'Admin',
       lastName: 'User',
       tenantId: tenant.id,

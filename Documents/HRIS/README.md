@@ -87,6 +87,26 @@ npm run lint           # Lint all code
 npm run format         # Format with Prettier
 ```
 
+### Verification Gates
+
+```bash
+npm run verify:uat      # UAT gate: type-check + build
+npm run verify:release  # Release gate: lint + type-check + build
+```
+
+- Use `verify:uat` for human testing and preview deployments.
+- Use `verify:release` before production promotion.
+
+### Lint Hardening Phases
+
+```bash
+npm run lint:hardening:phase1  # Strict auth + lib lint scope
+npm run lint:hardening:phase2  # Strict dashboard lint scope
+```
+
+- Run phase 1 continuously after UAT to prevent new debt in shared web utilities.
+- Run phase 2 as a backlog burn-down track until strict release lint can be tightened again.
+
 ### Testing
 
 ```bash
@@ -236,7 +256,9 @@ All API endpoints follow REST conventions with consistent response envelopes:
 ### Frontend (Next.js)
 1. Deploy to **Vercel** (recommended, native Next.js support)
 2. Set environment variables in Vercel dashboard
-3. Automatic deployments on git push to `main`
+3. Run `npm run verify:uat` before handoff to testers
+4. Run `npm run verify:release` before production promotion
+5. Automatic deployments on git push to `main`
 
 ### Backend (Hono API)
 1. Deploy to **Railway.app** or **Render.com**

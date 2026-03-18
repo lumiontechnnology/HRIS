@@ -1,7 +1,8 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { prisma } from '@lumion/database';
-import type { AppEnv } from './index';
+import type { AppEnv } from '../index.js';
+import { computeNigeriaMonthlyPayroll } from '../lib/payroll/calc.js';
 
 type Env = AppEnv;
 
@@ -12,6 +13,99 @@ const PayrollRunSchema = z.object({
   dueDate: z.string().datetime(),
   description: z.string().optional(),
 });
+
+const runStateTransitions: Record<string, string[]> = {
+  DRAFT: ['PROCESSING'],
+  PROCESSING: ['REVIEW'],
+  REVIEW: ['APPROVED'],
+  APPROVED: ['DISBURSED'],
+  DISBURSED: ['LOCKED'],
+  LOCKED: [],
+};
+
+function canTransition(current: string, next: string): boolean {
+  return (runStateTransitions[current] || []).includes(next);
+}
+
+function mapRunStatusForLegacyUi(status: string): string {
+  if (status === 'REVIEW') return 'GENERATED';
+  if (status === 'DISBURSED') return 'PAID';
+  return status;
+}
+
+function mapRunForResponse(run: {
+  id: string;
+  period: string;
+  startDate: Date;
+  endDate: Date;
+  status: string;
+  createdAt: Date;
+  approvedAt: Date | null;
+  payslips?: Array<{ netPay: unknown }>;
+  paySchedule: { id?: string; name: string; frequency: string };
+}) {
+  const totalAmount = (run.payslips || []).reduce((sum, slip) => sum + Number(slip.netPay), 0);
+
+  return {
+    ...run,
+    periodStart: run.startDate,
+    periodEnd: run.endDate,
+    dueDate: run.endDate,
+    status: mapRunStatusForLegacyUi(run.status),
+    workflowStatus: run.status,
+    totalAmount,
+  };
+}
+
+function mapPayslipForResponse(payslip: {
+  id: string;
+  grossPay: unknown;
+  deductions: unknown;
+  netPay: unknown;
+  deductionDetails: unknown;
+  payrollRun: { startDate: Date; endDate: Date; status: string };
+}) {
+  const details = Array.isArray(payslip.deductionDetails) ? payslip.deductionDetails : [];
+  const findAmount = (component: string): number => {
+    const row = details.find(
+      (item) =>
+        typeof item === 'object' &&
+        item !== null &&
+        'component' in item &&
+        String((item as { component: string }).component).toUpperCase() === component.toUpperCase()
+    ) as { amount?: unknown } | undefined;
+
+    return Number(row?.amount || 0);
+  };
+
+  return {
+    ...payslip,
+    basicSalary: Number(payslip.grossPay),
+    taxDeduction: findAmount('PAYE Tax'),
+    insuranceDeduction: findAmount('Pension') + findAmount('NHF'),
+    totalDeductions: Number(payslip.deductions),
+    netSalary: Number(payslip.netPay),
+    payrollRun: {
+      ...payslip.payrollRun,
+      periodStart: payslip.payrollRun.startDate,
+      periodEnd: payslip.payrollRun.endDate,
+      dueDate: payslip.payrollRun.endDate,
+      status: mapRunStatusForLegacyUi(payslip.payrollRun.status),
+      workflowStatus: payslip.payrollRun.status,
+    },
+  };
+}
+
+function payslipStorageUrl(tenantId: string, payrollRunId: string, payslipId: string): string {
+  const storageBase =
+    process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.APP_URL || '';
+
+  if (!storageBase) {
+    return `/storage/payslips/${tenantId}/${payrollRunId}/${payslipId}.pdf`;
+  }
+
+  return `${storageBase.replace(/\/$/, '')}/storage/v1/object/public/payslips/${tenantId}/${payrollRunId}/${payslipId}.pdf`;
+}
 
 export const createPayrollRoutes = (): Hono<Env> => {
   const app = new Hono<Env>();
@@ -30,8 +124,9 @@ export const createPayrollRoutes = (): Hono<Env> => {
       const existing = await prisma.payrollRun.findFirst({
         where: {
           tenantId,
-          periodStart: new Date(validatedData.periodStart),
-          periodEnd: new Date(validatedData.periodEnd),
+          payScheduleId: validatedData.payScheduleId,
+          startDate: new Date(validatedData.periodStart),
+          endDate: new Date(validatedData.periodEnd),
         },
       });
 
@@ -45,25 +140,27 @@ export const createPayrollRoutes = (): Hono<Env> => {
         );
       }
 
+      const period = validatedData.periodStart.slice(0, 7);
+
       const run = await prisma.payrollRun.create({
         data: {
           tenantId,
           payScheduleId: validatedData.payScheduleId,
-          periodStart: new Date(validatedData.periodStart),
-          periodEnd: new Date(validatedData.periodEnd),
-          dueDate: new Date(validatedData.dueDate),
+          period,
+          startDate: new Date(validatedData.periodStart),
+          endDate: new Date(validatedData.periodEnd),
           status: 'DRAFT',
-          description: validatedData.description,
         },
         include: {
-          paySchedule: { select: { name: true, frequency: true } },
+          paySchedule: { select: { id: true, name: true, frequency: true } },
+          payslips: { select: { netPay: true } },
         },
       });
 
       return c.json(
         {
           success: true,
-          data: run,
+          data: mapRunForResponse(run),
           message: 'Payroll run created successfully',
         },
         201
@@ -113,9 +210,10 @@ export const createPayrollRoutes = (): Hono<Env> => {
         prisma.payrollRun.findMany({
           where,
           include: {
-            paySchedule: { select: { name: true, frequency: true } },
+            paySchedule: { select: { id: true, name: true, frequency: true } },
+            payslips: { select: { netPay: true } },
           },
-          orderBy: { periodStart: 'desc' },
+          orderBy: { startDate: 'desc' },
           skip,
           take: limit,
         }),
@@ -124,7 +222,7 @@ export const createPayrollRoutes = (): Hono<Env> => {
 
       return c.json({
         success: true,
-        data: runs,
+        data: runs.map(mapRunForResponse),
         meta: {
           page,
           limit,
@@ -169,7 +267,40 @@ export const createPayrollRoutes = (): Hono<Env> => {
         );
       }
 
-      return c.json({ success: true, data: run });
+      const mappedRun = {
+        ...mapRunForResponse(run),
+        payslips: run.payslips.map((slip) => {
+          const details = Array.isArray(slip.deductionDetails) ? slip.deductionDetails : [];
+          const taxDeduction = Number(
+            (details as Array<{ component?: unknown; amount?: unknown }>).find(
+              (d) => String(d.component || '').toUpperCase() === 'PAYE TAX'
+            )?.amount || 0
+          );
+          const pension = Number(
+            (details as Array<{ component?: unknown; amount?: unknown }>).find(
+              (d) => String(d.component || '').toUpperCase() === 'PENSION'
+            )?.amount || 0
+          );
+          const nhf = Number(
+            (details as Array<{ component?: unknown; amount?: unknown }>).find(
+              (d) => String(d.component || '').toUpperCase() === 'NHF'
+            )?.amount || 0
+          );
+
+          return {
+            ...slip,
+            basicSalary: Number(slip.grossPay),
+            earnings: Number(slip.grossPay),
+            taxDeduction,
+            insuranceDeduction: pension + nhf,
+            totalDeductions: Number(slip.deductions),
+            netSalary: Number(slip.netPay),
+            status: run.status,
+          };
+        }),
+      };
+
+      return c.json({ success: true, data: mappedRun });
     } catch (error) {
       console.error('Error fetching payroll run:', error);
       return c.json(
@@ -187,6 +318,7 @@ export const createPayrollRoutes = (): Hono<Env> => {
     try {
       const id = c.req.param('id');
       const tenantId = c.get('tenantId');
+      const userId = c.get('userId');
 
       const run = await prisma.payrollRun.findUnique({
         where: { id },
@@ -209,6 +341,25 @@ export const createPayrollRoutes = (): Hono<Env> => {
         );
       }
 
+      if (!canTransition(run.status, 'PROCESSING')) {
+        return c.json(
+          {
+            success: false,
+            error: { code: 'INVALID_TRANSITION', message: `Cannot move from ${run.status} to PROCESSING` },
+          },
+          400
+        );
+      }
+
+      await prisma.payrollRun.update({
+        where: { id },
+        data: {
+          status: 'PROCESSING',
+          processedBy: userId,
+          processedAt: new Date(),
+        },
+      });
+
       // Get all active employees
       const employees = await prisma.employee.findMany({
         where: {
@@ -226,38 +377,65 @@ export const createPayrollRoutes = (): Hono<Env> => {
       // Generate payslips
       const payslips = await Promise.all(
         employees.map(async (emp) => {
-          const basicSalary = emp.salary || 0;
+          const grossPay = Number(emp.salary || 0);
+          const computed = computeNigeriaMonthlyPayroll(grossPay);
 
-          // Calculate deductions (simplified - 10% tax, 5% insurance)
-          const taxDeduction = basicSalary * 0.1;
-          const insuranceDeduction = basicSalary * 0.05;
-          const totalDeductions = taxDeduction + insuranceDeduction;
-
-          const netSalary = basicSalary - totalDeductions;
-
-          return prisma.payslip.create({
-            data: {
+          return prisma.payslip.upsert({
+            where: {
+              employeeId_payrollRunId: {
+                employeeId: emp.id,
+                payrollRunId: id,
+              },
+            },
+            update: {
+              grossPay: computed.grossPay,
+              deductions: computed.totalDeductions,
+              netPay: computed.netPay,
+              earnings: [{ component: 'Basic Salary', amount: computed.grossPay }],
+              deductionDetails: [
+                { component: 'PAYE Tax', amount: computed.payeTax },
+                { component: 'Pension', amount: computed.pension },
+                { component: 'NHF', amount: computed.nhf },
+              ],
+              pdfUrl: payslipStorageUrl(tenantId, id, `employee-${emp.id}`),
+            },
+            create: {
               tenantId,
               payrollRunId: id,
               employeeId: emp.id,
-              basicSalary,
-              earnings: basicSalary,
-              taxDeduction,
-              insuranceDeduction,
-              totalDeductions,
-              netSalary,
-              status: 'GENERATED',
+              grossPay: computed.grossPay,
+              deductions: computed.totalDeductions,
+              netPay: computed.netPay,
+              earnings: [{ component: 'Basic Salary', amount: computed.grossPay }],
+              deductionDetails: [
+                { component: 'PAYE Tax', amount: computed.payeTax },
+                { component: 'Pension', amount: computed.pension },
+                { component: 'NHF', amount: computed.nhf },
+              ],
+              pdfUrl: payslipStorageUrl(tenantId, id, `employee-${emp.id}`),
             },
           });
         })
       );
 
+      if (!canTransition('PROCESSING', 'REVIEW')) {
+        return c.json(
+          {
+            success: false,
+            error: {
+              code: 'INVALID_TRANSITION',
+              message: 'Cannot move from PROCESSING to REVIEW',
+            },
+          },
+          400
+        );
+      }
+
       // Update payroll run status
       const updatedRun = await prisma.payrollRun.update({
         where: { id },
         data: {
-          status: 'GENERATED',
-          totalAmount: payslips.reduce((sum, p) => sum + p.netSalary, 0),
+          status: 'REVIEW',
         },
       });
 
@@ -283,6 +461,7 @@ export const createPayrollRoutes = (): Hono<Env> => {
     try {
       const id = c.req.param('id');
       const tenantId = c.get('tenantId');
+      const userId = c.get('userId');
 
       const run = await prisma.payrollRun.findUnique({
         where: { id },
@@ -295,21 +474,32 @@ export const createPayrollRoutes = (): Hono<Env> => {
         );
       }
 
+      if (!canTransition(run.status, 'APPROVED')) {
+        return c.json(
+          {
+            success: false,
+            error: { code: 'INVALID_TRANSITION', message: `Cannot move from ${run.status} to APPROVED` },
+          },
+          400
+        );
+      }
+
       const updated = await prisma.payrollRun.update({
         where: { id },
         data: {
           status: 'APPROVED',
+          approvedBy: userId,
           approvedAt: new Date(),
         },
         include: {
           paySchedule: true,
-          payslips: { select: { id: true, status: true } },
+          payslips: { select: { id: true } },
         },
       });
 
       return c.json({
         success: true,
-        data: updated,
+        data: mapRunForResponse({ ...updated, period: run.period, startDate: run.startDate, endDate: run.endDate, createdAt: run.createdAt, approvedAt: updated.approvedAt, paySchedule: { id: updated.paySchedule.id, name: updated.paySchedule.name, frequency: updated.paySchedule.frequency }, payslips: [] }),
         message: 'Payroll run approved successfully',
       });
     } catch (error) {
@@ -331,13 +521,11 @@ export const createPayrollRoutes = (): Hono<Env> => {
       const page = parseInt(c.req.query('page') || '1');
       const limit = Math.min(parseInt(c.req.query('limit') || '20'), 100);
       const employeeId = c.req.query('employeeId');
-      const status = c.req.query('status');
 
       const skip = (page - 1) * limit;
 
       const where: any = { payrollRun: { tenantId } };
       if (employeeId) where.employeeId = employeeId;
-      if (status) where.status = status;
 
       const [payslips, total] = await Promise.all([
         prisma.payslip.findMany({
@@ -354,8 +542,9 @@ export const createPayrollRoutes = (): Hono<Env> => {
             payrollRun: {
               select: {
                 id: true,
-                periodStart: true,
-                periodEnd: true,
+                startDate: true,
+                endDate: true,
+                status: true,
               },
             },
           },
@@ -368,7 +557,7 @@ export const createPayrollRoutes = (): Hono<Env> => {
 
       return c.json({
         success: true,
-        data: payslips,
+        data: payslips.map((payslip) => mapPayslipForResponse(payslip as never)),
         meta: {
           page,
           limit,
@@ -411,9 +600,9 @@ export const createPayrollRoutes = (): Hono<Env> => {
           payrollRun: {
             select: {
               id: true,
-              periodStart: true,
-              periodEnd: true,
-              dueDate: true,
+              tenantId: true,
+              startDate: true,
+              endDate: true,
               status: true,
             },
           },
@@ -427,11 +616,198 @@ export const createPayrollRoutes = (): Hono<Env> => {
         );
       }
 
-      return c.json({ success: true, data: payslip });
+      return c.json({ success: true, data: mapPayslipForResponse(payslip as never) });
     } catch (error) {
       console.error('Error fetching payslip:', error);
       return c.json(
         { success: false, error: { code: 'FETCH_ERROR', message: 'Failed to fetch payslip' } },
+        500
+      );
+    }
+  });
+
+  /**
+   * PATCH /api/v1/payroll/runs/:id/disburse
+   * Mark approved payroll run as disbursed
+   */
+  app.patch('/runs/:id/disburse', async (c) => {
+    try {
+      const id = c.req.param('id');
+      const tenantId = c.get('tenantId');
+
+      const run = await prisma.payrollRun.findUnique({ where: { id } });
+
+      if (!run || run.tenantId !== tenantId) {
+        return c.json(
+          { success: false, error: { code: 'NOT_FOUND', message: 'Payroll run not found' } },
+          404
+        );
+      }
+
+      if (!canTransition(run.status, 'DISBURSED')) {
+        return c.json(
+          {
+            success: false,
+            error: { code: 'INVALID_TRANSITION', message: `Cannot move from ${run.status} to DISBURSED` },
+          },
+          400
+        );
+      }
+
+      const updated = await prisma.payrollRun.update({
+        where: { id },
+        data: { status: 'DISBURSED' },
+      });
+
+      await prisma.payslip.updateMany({
+        where: { payrollRunId: id, sentAt: null },
+        data: { sentAt: new Date() },
+      });
+
+      return c.json({
+        success: true,
+        data: {
+          ...updated,
+          status: mapRunStatusForLegacyUi(updated.status),
+          workflowStatus: updated.status,
+        },
+        message: 'Payroll disbursed successfully',
+      });
+    } catch (error) {
+      console.error('Error disbursing payroll run:', error);
+      return c.json(
+        { success: false, error: { code: 'UPDATE_ERROR', message: 'Failed to disburse payroll run' } },
+        500
+      );
+    }
+  });
+
+  /**
+   * PATCH /api/v1/payroll/runs/:id/lock
+   * Lock disbursed payroll run
+   */
+  app.patch('/runs/:id/lock', async (c) => {
+    try {
+      const id = c.req.param('id');
+      const tenantId = c.get('tenantId');
+
+      const run = await prisma.payrollRun.findUnique({ where: { id } });
+
+      if (!run || run.tenantId !== tenantId) {
+        return c.json(
+          { success: false, error: { code: 'NOT_FOUND', message: 'Payroll run not found' } },
+          404
+        );
+      }
+
+      if (!canTransition(run.status, 'LOCKED')) {
+        return c.json(
+          {
+            success: false,
+            error: { code: 'INVALID_TRANSITION', message: `Cannot move from ${run.status} to LOCKED` },
+          },
+          400
+        );
+      }
+
+      const updated = await prisma.payrollRun.update({
+        where: { id },
+        data: { status: 'LOCKED' },
+      });
+
+      return c.json({
+        success: true,
+        data: {
+          ...updated,
+          status: mapRunStatusForLegacyUi(updated.status),
+          workflowStatus: updated.status,
+        },
+        message: 'Payroll run locked successfully',
+      });
+    } catch (error) {
+      console.error('Error locking payroll run:', error);
+      return c.json(
+        { success: false, error: { code: 'UPDATE_ERROR', message: 'Failed to lock payroll run' } },
+        500
+      );
+    }
+  });
+
+  /**
+   * POST /api/v1/payroll/payslips/:id/generate-pdf
+   * Generate and persist payslip PDF URL placeholder for storage retrieval
+   */
+  app.post('/payslips/:id/generate-pdf', async (c) => {
+    try {
+      const id = c.req.param('id');
+      const tenantId = c.get('tenantId');
+
+      const payslip = await prisma.payslip.findUnique({ where: { id } });
+
+      if (!payslip || payslip.tenantId !== tenantId) {
+        return c.json(
+          { success: false, error: { code: 'NOT_FOUND', message: 'Payslip not found' } },
+          404
+        );
+      }
+
+      const pdfUrl = payslipStorageUrl(tenantId, payslip.payrollRunId, payslip.id);
+      const updated = await prisma.payslip.update({
+        where: { id },
+        data: { pdfUrl },
+      });
+
+      return c.json({
+        success: true,
+        data: {
+          id: updated.id,
+          pdfUrl: updated.pdfUrl,
+        },
+      });
+    } catch (error) {
+      console.error('Error generating payslip PDF:', error);
+      return c.json(
+        { success: false, error: { code: 'UPDATE_ERROR', message: 'Failed to generate payslip PDF' } },
+        500
+      );
+    }
+  });
+
+  /**
+   * POST /api/v1/payroll/payslips/:id/send
+   * Mark payslip as delivered
+   */
+  app.post('/payslips/:id/send', async (c) => {
+    try {
+      const id = c.req.param('id');
+      const tenantId = c.get('tenantId');
+
+      const payslip = await prisma.payslip.findUnique({ where: { id } });
+      if (!payslip || payslip.tenantId !== tenantId) {
+        return c.json(
+          { success: false, error: { code: 'NOT_FOUND', message: 'Payslip not found' } },
+          404
+        );
+      }
+
+      const updated = await prisma.payslip.update({
+        where: { id },
+        data: {
+          sentAt: new Date(),
+        },
+      });
+
+      return c.json({
+        success: true,
+        data: {
+          id: updated.id,
+          sentAt: updated.sentAt,
+        },
+      });
+    } catch (error) {
+      console.error('Error sending payslip:', error);
+      return c.json(
+        { success: false, error: { code: 'UPDATE_ERROR', message: 'Failed to send payslip' } },
         500
       );
     }
@@ -457,23 +833,38 @@ export const createPayrollRoutes = (): Hono<Env> => {
         prisma.payrollRun.findFirst({
           where: {
             tenantId,
-            periodStart: { gte: currentMonth, lt: nextMonth },
+            startDate: { gte: currentMonth, lt: nextMonth },
           },
         }),
         prisma.payrollRun.findFirst({
           where: {
             tenantId,
-            periodStart: { lt: currentMonth },
+            startDate: { lt: currentMonth },
           },
-          orderBy: { periodStart: 'desc' },
+          orderBy: { startDate: 'desc' },
         }),
         prisma.payslip.count({
           where: { payrollRun: { tenantId } },
         }),
       ]);
 
-      const thisMonthTotal = thisMonthRun?.totalAmount || 0;
-      const lastMonthTotal = lastMonthRun?.totalAmount || 0;
+      const [thisMonthPayslips, lastMonthPayslips] = await Promise.all([
+        thisMonthRun
+          ? prisma.payslip.findMany({
+              where: { payrollRunId: thisMonthRun.id },
+              select: { netPay: true },
+            })
+          : Promise.resolve([]),
+        lastMonthRun
+          ? prisma.payslip.findMany({
+              where: { payrollRunId: lastMonthRun.id },
+              select: { netPay: true },
+            })
+          : Promise.resolve([]),
+      ]);
+
+      const thisMonthTotal = thisMonthPayslips.reduce((sum, p) => sum + Number(p.netPay), 0);
+      const lastMonthTotal = lastMonthPayslips.reduce((sum, p) => sum + Number(p.netPay), 0);
 
       return c.json({
         success: true,

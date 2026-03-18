@@ -1,284 +1,74 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { useCurrentUser } from '@/lib/client-auth';
-import { Button } from '@lumion/ui';
-import { ChevronRight, ChevronLeft } from 'lucide-react';
+import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@lumion/ui';
+import { EmptyState, SectionHeader } from '@/components/system/primitives';
 
-interface OnboardingData {
-  department: string;
-  position: string;
-  startDate: string;
-  phone: string;
-}
+const onboardingTasks = [
+  { id: 'ONB-1', label: 'Create employee account', done: true },
+  { id: 'ONB-2', label: 'Assign manager and department', done: true },
+  { id: 'ONB-3', label: 'Upload employment documents', done: false },
+  { id: 'ONB-4', label: 'Enroll payroll profile', done: false },
+  { id: 'ONB-5', label: 'Complete orientation checklist', done: false },
+];
 
-export default function OnboardingPage() {
-  const router = useRouter();
-  const { user } = useCurrentUser();
-  const [step, setStep] = useState(1);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [formData, setFormData] = useState<OnboardingData>({
-    department: '',
-    position: '',
-    startDate: '',
-    phone: '',
-  });
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value,
-    }));
-  };
-
-  const handleNext = () => {
-    if (step < 3) {
-      setStep(step + 1);
-    }
-  };
-
-  const handleBack = () => {
-    if (step > 1) {
-      setStep(step - 1);
-    }
-  };
-
-  const handleComplete = async () => {
-    setIsLoading(true);
-    setError(null);
-    
-    try {
-      const response = await fetch('/api/onboarding', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to complete onboarding');
-      }
-
-      // Redirect to dashboard on success
-      router.push('/');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
-      console.error('Onboarding error:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleSkip = () => {
-    router.push('/');
-  };
-
-  const progressPercentage = (step / 3) * 100;
+export default function OnboardingPage(): JSX.Element {
+  const [tasks, setTasks] = useState(onboardingTasks);
+  const completed = tasks.filter((task) => task.done).length;
+  const progress = Math.round((completed / tasks.length) * 100);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 flex items-center justify-center p-4">
-      <div className="w-full max-w-2xl">
-        {/* Progress Bar */}
-        <div className="mb-8">
-          <div className="flex justify-between mb-2">
-            <h2 className="text-sm font-medium text-slate-700 dark:text-slate-300">
-              Step {step} of 3
-            </h2>
+    <div className="space-y-6">
+      <SectionHeader
+        title="Onboarding"
+        description="Track new-hire setup and drive completion across all onboarding milestones."
+      />
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Progress Tracker</CardTitle>
+          <CardDescription>{completed} of {tasks.length} tasks completed</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="h-3 rounded bg-slate-200">
+            <div className="h-3 rounded bg-slate-900" style={{ width: `${progress}%` }} />
+          </div>
+          <p className="mt-2 text-sm text-slate-600">Current completion: {progress}%</p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Task Checklist</CardTitle>
+          <CardDescription>Actionable setup list for HR and line managers</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {tasks.map((task) => (
             <button
-              onClick={handleSkip}
-              className="text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 underline"
+              type="button"
+              key={task.id}
+              onClick={() => {
+                setTasks((prev) =>
+                  prev.map((item) => (item.id === task.id ? { ...item, done: !item.done } : item))
+                );
+              }}
+              className="flex w-full items-center justify-between rounded border border-slate-200 px-3 py-2 text-left"
             >
-              Skip for now
+              <span className="text-sm text-slate-800">{task.label}</span>
+              <span className={`text-xs font-semibold ${task.done ? 'text-emerald-600' : 'text-slate-500'}`}>
+                {task.done ? 'Done' : 'Pending'}
+              </span>
             </button>
-          </div>
-          <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
-            <div
-              className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-              style={{ width: `${progressPercentage}%` }}
-            ></div>
-          </div>
-        </div>
+          ))}
+        </CardContent>
+      </Card>
 
-        {/* Card */}
-        <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg p-8">
-          {error && (
-            <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-              <p className="text-sm text-red-700 dark:text-red-400">{error}</p>
-            </div>
-          )}
-          {/* Step 1: Department & Position */}
-          {step === 1 && (
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">
-                  Tell us about your role
-                </h3>
-                <p className="text-slate-600 dark:text-slate-400">
-                  Help us update your work information
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                  Department
-                </label>
-                <select
-                  name="department"
-                  value={formData.department}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Select a department</option>
-                  <option value="engineering">Engineering</option>
-                  <option value="product">Product</option>
-                  <option value="design">Design</option>
-                  <option value="sales">Sales</option>
-                  <option value="marketing">Marketing</option>
-                  <option value="hr">Human Resources</option>
-                  <option value="finance">Finance</option>
-                  <option value="operations">Operations</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                  Job Position
-                </label>
-                <input
-                  type="text"
-                  name="position"
-                  value={formData.position}
-                  onChange={handleInputChange}
-                  placeholder="e.g., Senior Engineer"
-                  className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white placeholder-slate-500 dark:placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Step 2: Start Date & Phone */}
-          {step === 2 && (
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">
-                  Employment details
-                </h3>
-                <p className="text-slate-600 dark:text-slate-400">
-                  When did you start and how can we reach you?
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                  Start Date
-                </label>
-                <input
-                  type="date"
-                  name="startDate"
-                  value={formData.startDate}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                  Phone Number
-                </label>
-                <input
-                  type="tel"
-                  name="phone"
-                  value={formData.phone}
-                  onChange={handleInputChange}
-                  placeholder="+1 (555) 000-0000"
-                  className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white placeholder-slate-500 dark:placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Step 3: Review */}
-          {step === 3 && (
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">
-                  Review your information
-                </h3>
-                <p className="text-slate-600 dark:text-slate-400">
-                  Make sure everything looks correct
-                </p>
-              </div>
-
-              <div className="bg-slate-50 dark:bg-slate-700 rounded-lg p-4 space-y-4">
-                <div className="flex justify-between">
-                  <span className="text-sm font-medium text-slate-600 dark:text-slate-400">Name:</span>
-                  <span className="text-sm font-semibold text-slate-900 dark:text-white">{user?.firstName} {user?.lastName}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm font-medium text-slate-600 dark:text-slate-400">Email:</span>
-                  <span className="text-sm font-semibold text-slate-900 dark:text-white">{user?.email}</span>
-                </div>
-                <hr className="border-slate-200 dark:border-slate-600" />
-                <div className="flex justify-between">
-                  <span className="text-sm font-medium text-slate-600 dark:text-slate-400">Department:</span>
-                  <span className="text-sm font-semibold text-slate-900 dark:text-white capitalize">{formData.department || '-'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm font-medium text-slate-600 dark:text-slate-400">Position:</span>
-                  <span className="text-sm font-semibold text-slate-900 dark:text-white">{formData.position || '-'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm font-medium text-slate-600 dark:text-slate-400">Start Date:</span>
-                  <span className="text-sm font-semibold text-slate-900 dark:text-white">{formData.startDate || '-'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm font-medium text-slate-600 dark:text-slate-400">Phone:</span>
-                  <span className="text-sm font-semibold text-slate-900 dark:text-white">{formData.phone || '-'}</span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Navigation Buttons */}
-          <div className="flex gap-4 mt-8">
-            {step > 1 && (
-              <Button
-                onClick={handleBack}
-                variant="outline"
-                className="flex items-center gap-2"
-              >
-                <ChevronLeft className="w-4 h-4" />
-                Back
-              </Button>
-            )}
-            <div className="flex-1"></div>
-            {step < 3 && (
-              <Button
-                onClick={handleNext}
-                className="flex items-center gap-2"
-              >
-                Next
-                <ChevronRight className="w-4 h-4" />
-              </Button>
-            )}
-            {step === 3 && (
-              <Button
-                onClick={handleComplete}
-                disabled={isLoading}
-                className="bg-green-600 hover:bg-green-700 disabled:bg-green-400"
-              >
-                {isLoading ? 'Completing...' : 'Complete Onboarding'}
-              </Button>
-            )}
-          </div>
-        </div>
-      </div>
+      <EmptyState
+        tone="friendly"
+        title="Welcome flow enabled"
+        description="Friendly illustration area reserved for new-hire guidance and culture material."
+        action={<Button>Open New Hire Pack</Button>}
+      />
     </div>
   );
 }

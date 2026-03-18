@@ -1,8 +1,9 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { prisma } from '@lumion/database';
-import type { AppEnv } from './index';
+import type { AppEnv } from '../index.js';
 import { LeaveRequestCreateSchema } from '@lumion/validators';
+import { sendLeaveNotification } from '../lib/email/leave-emails.js';
 
 type Env = AppEnv;
 
@@ -40,8 +41,8 @@ export const createLeaveRoutes = (): Hono<Env> => {
         include: { roles: true },
       });
 
-      const isManager = user?.roles.some((r) => r.code === 'MANAGER');
-      const isHR = user?.roles.some((r) => r.code === 'HR_ADMIN' || r.code === 'SUPER_ADMIN');
+      const isManager = user?.roles.some((r) => r.name === 'MANAGER');
+      const isHR = user?.roles.some((r) => r.name === 'HR_ADMIN' || r.name === 'SUPER_ADMIN');
 
       // Non-managers/HR can only see their own
       if (!isManager && !isHR) {
@@ -68,9 +69,7 @@ export const createLeaveRoutes = (): Hono<Env> => {
                 manager: { select: { firstName: true, lastName: true } },
               },
             },
-            leaveType: { select: { name: true, color: true } },
-            approvedByManager: { select: { firstName: true, lastName: true } },
-            approvedByHR: { select: { firstName: true, lastName: true } },
+            leaveType: { select: { name: true } },
           },
           orderBy: { createdAt: 'desc' },
           skip,
@@ -123,8 +122,6 @@ export const createLeaveRoutes = (): Hono<Env> => {
             },
           },
           leaveType: true,
-          approvedByManager: { select: { firstName: true, lastName: true } },
-          approvedByHR: { select: { firstName: true, lastName: true } },
         },
       });
 
@@ -149,7 +146,6 @@ export const createLeaveRoutes = (): Hono<Env> => {
   app.post('/', async (c) => {
     try {
       const tenantId = c.get('tenantId');
-      const userId = c.get('userId');
 
       const body = await c.req.json();
       const validatedData = LeaveRequestCreateSchema.parse(body);
@@ -208,15 +204,42 @@ export const createLeaveRoutes = (): Hono<Env> => {
           leaveTypeId: validatedData.leaveTypeId,
           startDate: startDate,
           endDate: endDate,
-          daysRequested,
+          duration: daysRequested,
           reason: validatedData.reason,
           status: 'SUBMITTED',
         },
         include: {
-          employee: { select: { firstName: true, lastName: true } },
+          employee: {
+            select: {
+              firstName: true,
+              lastName: true,
+              manager: {
+                select: {
+                  email: true,
+                  firstName: true,
+                  lastName: true,
+                },
+              },
+            },
+          },
           leaveType: { select: { name: true } },
         },
       });
+
+      if (request.employee.manager?.email) {
+        await sendLeaveNotification({
+          type: 'SUBMITTED',
+          recipientEmail: request.employee.manager.email,
+          recipientName:
+            `${request.employee.manager.firstName ?? ''} ${request.employee.manager.lastName ?? ''}`.trim() ||
+            undefined,
+          employeeName: `${request.employee.firstName} ${request.employee.lastName}`.trim(),
+          leaveTypeName: request.leaveType.name,
+          startDate: request.startDate,
+          endDate: request.endDate,
+          reason: request.reason,
+        });
+      }
 
       return c.json(
         {
@@ -285,14 +308,13 @@ export const createLeaveRoutes = (): Hono<Env> => {
         where: { id },
         data: {
           status: validatedData.status,
-          managerApprovedAt: new Date(),
-          approvedByManagerId: userId,
-          managerComment: validatedData.approverComment,
+          approvalDate: new Date(),
+          approvedBy: userId,
+          approvalNotes: validatedData.approverComment,
         },
         include: {
           employee: { select: { firstName: true, lastName: true } },
           leaveType: { select: { name: true } },
-          approvedByManager: { select: { firstName: true, lastName: true } },
         },
       });
 
@@ -307,9 +329,32 @@ export const createLeaveRoutes = (): Hono<Env> => {
             },
           },
           data: {
-            available: { decrement: request.daysRequested },
-            used: { increment: request.daysRequested },
+            available: { decrement: request.duration },
+            taken: { increment: request.duration },
           },
+        });
+      }
+
+      const employee = await prisma.employee.findUnique({
+        where: { id: request.employeeId },
+        select: {
+          email: true,
+          firstName: true,
+          lastName: true,
+        },
+      });
+
+      if (employee?.email) {
+        await sendLeaveNotification({
+          type: validatedData.status,
+          recipientEmail: employee.email,
+          recipientName: `${employee.firstName} ${employee.lastName}`.trim(),
+          employeeName: `${employee.firstName} ${employee.lastName}`.trim(),
+          leaveTypeName: updated.leaveType.name,
+          startDate: request.startDate,
+          endDate: request.endDate,
+          reason: request.reason,
+          approverComment: validatedData.approverComment,
         });
       }
 
@@ -359,7 +404,7 @@ export const createLeaveRoutes = (): Hono<Env> => {
           year: new Date().getFullYear(),
         },
         include: {
-          leaveType: { select: { name: true, color: true } },
+          leaveType: { select: { name: true } },
         },
       });
 

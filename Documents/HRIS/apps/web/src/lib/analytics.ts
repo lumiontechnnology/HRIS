@@ -79,8 +79,13 @@ class Analytics {
 
   // Send to custom analytics endpoint
   private async sendToEndpoint(name: string, properties?: Record<string, any>) {
+    const endpoint = process.env.NEXT_PUBLIC_ANALYTICS_ENDPOINT;
+    if (!endpoint) {
+      return;
+    }
+
     try {
-      await fetch(process.env.NEXT_PUBLIC_ANALYTICS_ENDPOINT!, {
+      await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

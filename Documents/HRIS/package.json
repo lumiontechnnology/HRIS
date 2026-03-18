@@ -4,19 +4,28 @@
   "description": "Production-grade Human Resource Information System",
   "license": "MIT",
   "private": true,
+  "packageManager": "pnpm@10.32.1",
   "engines": {
     "node": "20.x",
     "npm": "10.x"
   },
   "scripts": {
+    "postinstall": "pnpm --filter @lumion/database db:generate",
+    "prebuild": "pnpm --filter @lumion/database db:generate",
     "dev": "turbo dev --filter='./apps/*'",
     "build": "turbo build",
+    "build:web": "pnpm --filter @lumion/database db:generate && pnpm --filter @lumion/web build",
     "test": "turbo test",
     "test:watch": "turbo test -- --watch",
     "test:coverage": "turbo test -- --coverage",
     "lint": "turbo lint",
+    "lint:ci": "turbo lint -- --max-warnings=0",
+    "lint:hardening:phase1": "eslint \"apps/web/src/app/(auth)/**/*.{ts,tsx}\" \"apps/web/src/lib/**/*.{ts,tsx}\" --max-warnings=0 --rule \"@typescript-eslint/no-unused-vars:error\" --rule \"@typescript-eslint/no-non-null-assertion:error\" --rule \"@typescript-eslint/await-thenable:error\"",
+    "lint:hardening:phase2": "eslint \"apps/web/src/app/(dashboard)/**/*.{ts,tsx}\" --max-warnings=0 --rule \"@typescript-eslint/no-unused-vars:error\" --rule \"@typescript-eslint/restrict-template-expressions:error\"",
     "format": "turbo format",
     "type-check": "turbo type-check",
+    "verify:uat": "npx turbo db:generate && npx turbo type-check && npx turbo build",
+    "verify:release": "npx turbo db:generate && npx turbo lint -- --max-warnings=0 && npx turbo type-check && npx turbo build",
     "db:generate": "turbo db:generate",
     "db:migrate": "turbo db:migrate",
     "db:seed": "turbo db:seed",
@@ -31,5 +40,8 @@
     "turbo": "^1.11.3",
     "typescript": "^5.3.3"
   },
-  "dependencies": {}
+  "dependencies": {},
+  "volta": {
+    "node": "20.20.1"
+  }
 }

@@ -1,14 +1,12 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { prisma } from '@lumion/database';
-import type { AppEnv } from './index';
+import type { AppEnv } from '../index.js';
 
 type Env = AppEnv;
 
 const ClockSchema = z.object({
-  employeeId: z.string().uuid(),
-  latitude: z.number().optional(),
-  longitude: z.number().optional(),
+  employeeId: z.string().min(1),
   notes: z.string().optional(),
 });
 
@@ -44,8 +42,9 @@ export const createAttendanceRoutes = (): Hono<Env> => {
 
       const existingRecord = await prisma.attendance.findFirst({
         where: {
+          tenantId,
           employeeId: validatedData.employeeId,
-          clockInTime: {
+          date: {
             gte: today,
             lt: tomorrow,
           },
@@ -85,10 +84,8 @@ export const createAttendanceRoutes = (): Hono<Env> => {
           tenantId,
           employeeId: validatedData.employeeId,
           date: today,
-          clockInTime,
+          clockIn: clockInTime,
           status: isLate && !leaveRequest ? 'LATE' : status,
-          latitude: validatedData.latitude,
-          longitude: validatedData.longitude,
           notes: validatedData.notes,
         },
         include: {
@@ -148,7 +145,7 @@ export const createAttendanceRoutes = (): Hono<Env> => {
         where: {
           employeeId: validatedData.employeeId,
           tenantId,
-          clockInTime: {
+          date: {
             gte: today,
             lt: tomorrow,
           },
@@ -162,7 +159,7 @@ export const createAttendanceRoutes = (): Hono<Env> => {
         );
       }
 
-      if (record.clockOutTime) {
+      if (record.clockOut) {
         return c.json(
           { success: false, error: { code: 'ALREADY_CLOCKED_OUT', message: 'Already clocked out' } },
           400
@@ -171,9 +168,18 @@ export const createAttendanceRoutes = (): Hono<Env> => {
 
       const clockOutTime = new Date();
 
-      // Calculate hours worked
-      const hoursWorked =
-        (clockOutTime.getTime() - record.clockInTime.getTime()) / (1000 * 60 * 60);
+      if (!record.clockIn) {
+        return c.json(
+          { success: false, error: { code: 'INVALID_STATE', message: 'Clock-in time missing' } },
+          400
+        );
+      }
+
+      // Calculate duration in minutes
+      const duration = Math.max(
+        0,
+        Math.round((clockOutTime.getTime() - record.clockIn.getTime()) / (1000 * 60))
+      );
 
       // Check for early departure (before 5 PM)
       const fivePM = new Date();
@@ -183,8 +189,8 @@ export const createAttendanceRoutes = (): Hono<Env> => {
       const updated = await prisma.attendance.update({
         where: { id: record.id },
         data: {
-          clockOutTime,
-          hoursWorked,
+          clockOut: clockOutTime,
+          duration,
           status: isEarlyDeparture && record.status === 'PRESENT' ? 'EARLY_DEPARTURE' : record.status,
         },
         include: {
@@ -195,7 +201,7 @@ export const createAttendanceRoutes = (): Hono<Env> => {
       return c.json({
         success: true,
         data: updated,
-        message: `Clock-out recorded. Hours worked: ${hoursWorked.toFixed(2)}`,
+        message: `Clock-out recorded. Duration: ${(duration / 60).toFixed(2)} hours`,
       });
     } catch (error) {
       console.error('Error recording clock-out:', error);
@@ -413,8 +419,8 @@ export const createAttendanceRoutes = (): Hono<Env> => {
         else if (record.status === 'ABSENT') emp.absent++;
         else if (record.status === 'ON_LEAVE') emp.onLeave++;
 
-        if (record.hoursWorked) {
-          emp.totalHours += record.hoursWorked;
+        if (record.duration) {
+          emp.totalHours += record.duration / 60;
         }
       });
 

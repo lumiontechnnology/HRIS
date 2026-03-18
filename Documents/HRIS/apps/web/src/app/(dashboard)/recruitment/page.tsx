@@ -1,197 +1,197 @@
 'use client';
 
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, Input } from '@lumion/ui';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, Button } from '@lumion/ui';
+import { Badge, CardSkeleton, SectionHeader } from '@/components/system/primitives';
+import { fetchDashboardApi } from '@/lib/dashboard-api';
 import { useCurrentUser } from '@/lib/client-auth';
-import Link from 'next/link';
-import { Briefcase, Users, CheckCircle, XCircle, Calendar } from 'lucide-react';
+
+const stages: Array<'Applied' | 'Screening' | 'Interview' | 'Offer' | 'Hired'> = [
+  'Applied',
+  'Screening',
+  'Interview',
+  'Offer',
+  'Hired',
+];
+
+interface RecruitmentSummaryResponse {
+  data: {
+    openPositions: number;
+    totalApplications: number;
+    shortlisted: number;
+    rejected: number;
+    scheduledInterviews: number;
+    conversionRate: number;
+  };
+}
+
+interface RecruitmentApplicationsResponse {
+  data: Array<{
+    id: string;
+    firstName: string;
+    lastName: string;
+    status: string;
+    currentScore?: number | null;
+    currentStage?: string | null;
+    jobRequisition?: {
+      status?: string;
+    } | null;
+  }>;
+}
+
+interface PipelineCandidate {
+  id: string;
+  name: string;
+  tags: string[];
+  score: number;
+  stage: 'Applied' | 'Screening' | 'Interview' | 'Offer' | 'Hired';
+}
+
+function mapApplicationStage(value: string): PipelineCandidate['stage'] {
+  if (value === 'SCREENING') return 'Screening';
+  if (value === 'PHONE_INTERVIEW' || value === 'TECHNICAL_TEST' || value === 'PANEL_INTERVIEW') {
+    return 'Interview';
+  }
+  if (value === 'OFFER') return 'Offer';
+  if (value === 'HIRED') return 'Hired';
+  return 'Applied';
+}
 
 export default function RecruitmentPage(): JSX.Element {
   const { user } = useCurrentUser();
+  const [query, setQuery] = useState('');
 
-  const { data } = useQuery({
-    queryKey: ['recruitment-summary'],
+  const { data, isLoading } = useQuery({
+    queryKey: ['ui-recruitment', user?.id, user?.tenantId],
+    enabled: !!user?.tenantId,
     queryFn: async () => {
-      const res = await fetch('http://localhost:3001/api/v1/recruitment/summary', {
-        headers: {
-          'x-user-id': user?.id || '',
-          'x-tenant-id': user?.tenantId || '',
-        },
-      });
+      const [summaryResponse, applicationsResponse] = await Promise.all([
+        fetchDashboardApi<RecruitmentSummaryResponse>(
+          '/api/v1/recruitment/summary',
+          user ? { id: user.id, tenantId: user.tenantId } : undefined
+        ),
+        fetchDashboardApi<RecruitmentApplicationsResponse>(
+          '/api/v1/recruitment/applications?limit=200',
+          user ? { id: user.id, tenantId: user.tenantId } : undefined
+        ),
+      ]);
 
-      if (!res.ok) {
-        throw new Error('Failed to fetch summary');
-      }
+      const pipeline: PipelineCandidate[] = applicationsResponse.data.map((application) => ({
+        id: application.id,
+        name: `${application.firstName} ${application.lastName}`.trim(),
+        tags: [application.currentStage || application.status, application.jobRequisition?.status || 'Job Open'],
+        score: application.currentScore ?? 0,
+        stage: mapApplicationStage(application.status),
+      }));
 
-      return res.json();
+      return {
+        summary: summaryResponse.data,
+        pipeline,
+      };
     },
-    enabled: !!user,
   });
 
-  const summary = data?.data || {};
+  const effectiveCandidates: PipelineCandidate[] = data?.pipeline ?? [];
+
+  const filtered = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    if (!normalized) return effectiveCandidates;
+    return effectiveCandidates.filter((candidate) => {
+      return (
+        candidate.name.toLowerCase().includes(normalized) ||
+        candidate.tags.join(' ').toLowerCase().includes(normalized)
+      );
+    });
+  }, [effectiveCandidates, query]);
+
+  const summary = data?.summary;
+  const openPositions = summary?.openPositions ?? 0;
+  const totalApplications = summary?.totalApplications ?? effectiveCandidates.length;
+  const scheduledInterviews = summary?.scheduledInterviews ?? filtered.filter((c) => c.stage === 'Interview').length;
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Recruitment</h1>
-          <p className="mt-1 text-slate-600 dark:text-slate-400">
-            Manage job openings, applications, and interviews.
-          </p>
-        </div>
-        <Link href="/recruitment/jobs/new">
-          <Button>
-            <Briefcase className="mr-2 h-4 w-4" />
-            Post Job
-          </Button>
-        </Link>
-      </div>
+      <SectionHeader
+        title="Recruitment"
+        description="Applicant tracking pipeline from application to hire."
+      />
 
-      {/* KPI Cards */}
-      <div className="grid gap-4 md:grid-cols-5">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-sm">
-              <Briefcase className="h-4 w-4" />
-              Open Positions
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold">{summary.openPositions || 0}</p>
-            <p className="text-xs text-slate-600 dark:text-slate-400">active jobs</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-sm">
-              <Users className="h-4 w-4" />
-              Applications
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold">{summary.totalApplications || 0}</p>
-            <p className="text-xs text-slate-600 dark:text-slate-400">total received</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-sm">
-              <CheckCircle className="h-4 w-4" />
-              Shortlisted
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold">{summary.shortlisted || 0}</p>
-            <p className="text-xs text-slate-600 dark:text-slate-400">moving forward</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-sm">
-              <XCircle className="h-4 w-4" />
-              Rejected
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold">{summary.rejected || 0}</p>
-            <p className="text-xs text-slate-600 dark:text-slate-400">not selected</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-sm">
-              <Calendar className="h-4 w-4" />
-              Interviews
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold">{summary.scheduledInterviews || 0}</p>
-            <p className="text-xs text-slate-600 dark:text-slate-400">scheduled</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Conversion Rate */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Recruitment Metrics</CardTitle>
-          <CardDescription>Key performance indicators</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-6">
-            <div>
-              <div className="flex justify-between mb-2">
-                <p className="font-semibold">Conversion Rate</p>
-                <p className="text-2xl font-bold">{summary.conversionRate}%</p>
-              </div>
-              <div className="h-2 w-full bg-slate-200 rounded-full dark:bg-slate-800">
-                <div
-                  className="h-full bg-green-500 rounded-full"
-                  style={{ width: `${summary.conversionRate}%` }}
-                />
-              </div>
-              <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
-                {summary.shortlisted} of {summary.totalApplications} applications shortlisted
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Quick Actions */}
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Job Openings</CardTitle>
+          <CardHeader className="pb-2">
+            <CardDescription>Open Positions</CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
-              Create and manage active job requisitions.
-            </p>
-            <Link href="/recruitment/jobs">
-              <Button variant="outline" className="w-full">
-                View All Jobs
-              </Button>
-            </Link>
+            <p className="text-2xl font-semibold">{openPositions}</p>
           </CardContent>
         </Card>
-
         <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Applications</CardTitle>
+          <CardHeader className="pb-2">
+            <CardDescription>Total Applications</CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
-              Review and manage candidate applications.
-            </p>
-            <Link href="/recruitment/applications">
-              <Button variant="outline" className="w-full">
-                View Pipeline
-              </Button>
-            </Link>
+            <p className="text-2xl font-semibold">{totalApplications}</p>
           </CardContent>
         </Card>
-
         <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Interviews</CardTitle>
+          <CardHeader className="pb-2">
+            <CardDescription>Scheduled Interviews</CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
-              Schedule and track interview sessions.
-            </p>
-            <Link href="/recruitment/interviews">
-              <Button variant="outline" className="w-full">
-                View Schedule
-              </Button>
-            </Link>
+            <p className="text-2xl font-semibold">{scheduledInterviews}</p>
           </CardContent>
         </Card>
+      </div>
+
+      <div className="max-w-sm">
+        <Input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search candidates by name or tags"
+        />
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-5">
+        {isLoading
+          ? stages.map((stage) => (
+              <div key={stage}>
+                <CardSkeleton />
+              </div>
+            ))
+          : stages.map((stage) => {
+              const stageCandidates = filtered.filter((candidate) => candidate.stage === stage);
+
+              return (
+                <Card key={stage}>
+                  <CardHeader>
+                    <CardTitle className="text-base">{stage}</CardTitle>
+                    <CardDescription>{stageCandidates.length} candidates</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {stageCandidates.length === 0 ? (
+                      <div className="rounded border border-dashed border-slate-200 p-3 text-xs text-slate-500">
+                        No candidates in this stage.
+                      </div>
+                    ) : (
+                      stageCandidates.map((candidate) => (
+                        <div key={candidate.id} className="rounded border border-slate-200 p-3">
+                          <div className="mb-2 flex items-center justify-between">
+                            <p className="text-sm font-semibold text-slate-900">{candidate.name}</p>
+                            <Badge tone={candidate.score >= 85 ? 'success' : 'info'}>Score {candidate.score}</Badge>
+                          </div>
+                          <div className="flex flex-wrap gap-1">
+                            {candidate.tags.map((tag) => (
+                              <Badge key={tag} tone="neutral">{tag}</Badge>
+                            ))}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
       </div>
     </div>
   );
