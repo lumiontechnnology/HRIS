@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { serve } from '@hono/node-server';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { PrismaClient } from '@prisma/client';
@@ -98,3 +99,14 @@ app.onError((err, c) => {
 });
 
 export default app;
+
+const port = Number(process.env.PORT || 3001);
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  serve({
+    fetch: app.fetch,
+    port,
+  });
+
+  console.log(`API server running on http://localhost:${port}`);
+}

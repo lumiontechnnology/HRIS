@@ -2,6 +2,7 @@
   "name": "@lumion/types",
   "version": "1.0.0",
   "description": "Shared types for Lumion HRIS",
+  "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "scripts": {

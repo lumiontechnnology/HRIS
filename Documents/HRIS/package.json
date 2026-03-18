@@ -31,7 +31,5 @@
     "turbo": "^1.11.3",
     "typescript": "^5.3.3"
   },
-  "dependencies": {
-    "svix": "^1.88.0"
-  }
+  "dependencies": {}
 }

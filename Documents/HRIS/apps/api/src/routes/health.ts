@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { prisma } from '@lumion/database';
 import type { AppEnv } from '../index.js';
 
 export function createHealthRoutes(): Hono<AppEnv> {
@@ -18,11 +19,8 @@ export function createHealthRoutes(): Hono<AppEnv> {
   // Readiness check (app is ready to accept traffic)
   app.get('/ready', async (c) => {
     try {
-      // Check database connection
-      const prisma = require('@lumion/database').PrismaClient;
-      const client = new prisma();
-      await client.$queryRaw`SELECT 1`;
-      await client.$disconnect();
+      // Check database connection through the shared Prisma client
+      await prisma.$queryRawUnsafe('SELECT 1');
 
       return c.json({
         status: 'ready',

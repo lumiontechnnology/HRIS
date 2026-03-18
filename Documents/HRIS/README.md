@@ -25,7 +25,7 @@ lumion-hris/
 ### Prerequisites
 
 - **Node.js** 20+ (use `nvm` if needed)
-- **PostgreSQL** 15+ (local or Supabase/Neon)
+- **PostgreSQL** 15+ (local or Supabase)
 - **npm** 10+ or **yarn**
 
 ### 1. Environment Setup
@@ -144,7 +144,7 @@ npm run db:studio      # Open Prisma Studio GUI
 - ✅ **CORS** configured for frontend origin
 - ✅ **Environment Variables** for secrets
 - ✅ **HTTPS Ready** for production deployment
-- ⏳ **NextAuth v5** MFA/SSO integration (coming next)
+- ⏳ **Supabase Auth** MFA/SSO integration (coming next)
 - ⏳ **Rate Limiting** via Redis (coming next)
 - ⏳ **Audit Logging** on all mutations (coming next)
 
@@ -244,7 +244,7 @@ All API endpoints follow REST conventions with consistent response envelopes:
 3. Run migrations on deployment
 
 ### Database
-1. Use **Supabase** or **Neon** for managed PostgreSQL
+1. Use **Supabase** for managed PostgreSQL
 2. Connection pooling enabled for serverless
 3. Automated backups included
 

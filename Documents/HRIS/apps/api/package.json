@@ -12,7 +12,7 @@
     "format": "prettier --write src"
   },
   "dependencies": {
-    "@clerk/clerk-sdk-node": "^4.13.0",
+    "@hono/node-server": "^1.13.7",
     "@lumion/database": "workspace:*",
     "@lumion/types": "workspace:*",
     "@lumion/validators": "workspace:*",

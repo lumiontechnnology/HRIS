@@ -1,23 +1,26 @@
-import { auth } from '@clerk/nextjs';
 import { PrismaClient } from '@lumion/database';
 import { NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
 
 const prisma = new PrismaClient();
 
-export async function GET(request: Request) {
+export async function GET(_request: Request) {
   try {
-    const { userId } = auth();
-    
-    if (!userId) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      );
+    const supabase = await createClient();
+    const {
+      data: { user: authUser },
+    } = await supabase.auth.getUser();
+
+    if (!authUser) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Get current user
+    if (!authUser.email) {
+      return NextResponse.json({ success: false, error: 'Email is required' }, { status: 400 });
+    }
+
     const user = await prisma.user.findUnique({
-      where: { clerkUserId: userId },
+      where: { email: authUser.email },
       include: { tenant: true },
     });
 

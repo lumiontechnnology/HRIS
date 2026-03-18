@@ -73,14 +73,14 @@ model Tenant {
 
 model User {
   id                    String   @id @default(cuid())
-  clerkUserId           String   @unique
+  authUserId            String   @unique
   email                 String   @unique
   firstName             String
   lastName              String
   avatar                String?
   tenantId              String
   
-  // Login tracking (managed by Clerk but tracked locally)
+  // Login tracking (managed by auth provider but tracked locally)
   lastLogin             DateTime?
   
   // Permissions
@@ -103,7 +103,7 @@ model User {
   @@index([tenantId])
   @@index([email])
   @@index([employeeId])
-  @@index([clerkUserId])
+  @@index([authUserId])
 }
 
 model Role {

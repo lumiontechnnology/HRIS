@@ -1,7 +1,6 @@
 'use client';
 
-import { useClerk } from '@clerk/nextjs';
-import { useCurrentUser } from '@/lib/client-auth';
+import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
 import {
   LayoutDashboard,
@@ -22,7 +21,6 @@ import {
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
-import { Button } from '@lumion/ui';
 
 const navItems = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -40,8 +38,7 @@ const navItems = [
 export function Sidebar(): JSX.Element {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const { user } = useCurrentUser();
-  const { signOut } = useClerk();
+  const supabase = createClient();
 
   return (
     <>
@@ -107,7 +104,10 @@ export function Sidebar(): JSX.Element {
               Settings
             </Link>
             <button
-              onClick={() => signOut(() => window.location.assign('/sign-in'))}
+              onClick={async () => {
+                await supabase.auth.signOut();
+                window.location.assign('/sign-in');
+              }}
               className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
             >
               <LogOut className="h-5 w-5" />

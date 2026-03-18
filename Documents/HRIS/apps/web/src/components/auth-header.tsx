@@ -1,14 +1,35 @@
-"use client";
+'use client';
 
-import { SignInButton, SignUpButton, UserButton, useAuth } from "@clerk/nextjs";
-import Link from "next/link";
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { createClient } from '@/lib/supabase/client';
 
 export function AuthHeader() {
-  const { isSignedIn } = useAuth();
+  const supabase = createClient();
+  const [isSignedIn, setIsSignedIn] = useState(false);
+
+  useEffect(() => {
+    const bootstrap = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      setIsSignedIn(!!user);
+    };
+
+    bootstrap();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsSignedIn(!!session?.user);
+    });
+
+    return () => subscription.unsubscribe();
+  }, [supabase]);
 
   return (
-    <header className="flex items-center justify-between p-4 bg-white border-b">
-      <Link href="/" className="text-lg font-semibold hover:opacity-80 transition">
+    <header className="flex items-center justify-between border-b bg-white p-4">
+      <Link href="/" className="text-lg font-semibold transition hover:opacity-80">
         Lumion HRIS
       </Link>
       <div className="flex gap-4">
@@ -16,19 +37,27 @@ export function AuthHeader() {
           <>
             <Link
               href="/sign-in"
-              className="px-4 py-2 text-sm font-medium text-slate-700 hover:text-slate-900 transition"
+              className="px-4 py-2 text-sm font-medium text-slate-700 transition hover:text-slate-900"
             >
               Sign in
             </Link>
             <Link
               href="/sign-up"
-              className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
+              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700"
             >
               Sign up
             </Link>
           </>
         ) : (
-          <UserButton />
+          <button
+            onClick={async () => {
+              await supabase.auth.signOut();
+              window.location.assign('/sign-in');
+            }}
+            className="rounded-md px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+          >
+            Sign out
+          </button>
         )}
       </div>
     </header>

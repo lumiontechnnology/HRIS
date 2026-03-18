@@ -11,8 +11,9 @@
     "format": "prettier --write ."
   },
   "dependencies": {
-    "@clerk/nextjs": "^4.29.0",
     "@hookform/resolvers": "^3.3.4",
+    "@supabase/ssr": "^0.5.2",
+    "@supabase/supabase-js": "^2.49.8",
     "@lumion/database": "workspace:*",
     "@lumion/types": "workspace:*",
     "@lumion/ui": "workspace:*",
