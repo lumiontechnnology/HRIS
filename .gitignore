@@ -22,3 +22,5 @@ build/
 .env.production.local
 out/
 pnpm-debug.log*
+.vercel
+.env*.local
