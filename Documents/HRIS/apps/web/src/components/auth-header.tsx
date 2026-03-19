@@ -9,11 +9,13 @@ export function AuthHeader() {
   const pathname = usePathname();
   const [isSignedIn, setIsSignedIn] = useState(false);
 
-  if (pathname && pathname !== '/sign-in' && pathname !== '/sign-up' && pathname !== '/login') {
-    return null;
-  }
+  const shouldShowHeader = pathname === '/sign-in' || pathname === '/sign-up' || pathname === '/login';
 
   useEffect(() => {
+    if (!shouldShowHeader) {
+      return;
+    }
+
     let mounted = true;
     let subscription: { unsubscribe: () => void } | undefined;
 
@@ -49,7 +51,11 @@ export function AuthHeader() {
       mounted = false;
       subscription?.unsubscribe();
     };
-  }, []);
+  }, [shouldShowHeader]);
+
+  if (!shouldShowHeader) {
+    return null;
+  }
 
   return (
     <header className="border-b border-border bg-background px-6 py-4">
