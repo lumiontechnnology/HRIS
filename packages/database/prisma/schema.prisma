@@ -38,12 +38,20 @@ model Tenant {
   id        String   @id @default(cuid())
   name      String   @unique
   slug      String   @unique
+  industry  String?
+  size      String?
   logo      String?
+  address   String?
+  registrationNumber String?
+  fiscalYearStartMonth Int? @default(1)
   website   String?
   email     String?
   phone     String?
-  country   String?
+  country   String?  @default("Nigeria")
   timezone  String   @default("UTC")
+  isActive  Boolean  @default(true)
+  trialEndsAt DateTime @default(dbgenerated("now() + interval '14 days'"))
+  onboardingComplete Boolean @default(false)
   
   // Subscription
   plan      String   @default("starter") // starter, professional, enterprise
@@ -576,6 +584,7 @@ model WorkSchedule {
   workEnd       String   @default("17:00")
   graceMinutes  Int      @default(15)
   overtimeAfter Decimal  @default(8) @db.Decimal(4, 2)
+  timezone      String   @default("Africa/Lagos")
 
   tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 

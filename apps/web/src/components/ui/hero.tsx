@@ -41,8 +41,12 @@ export default function ShaderShowcase() {
           <a href="/features" className="text-foreground/80 dark:text-white/80 hover:text-foreground dark:hover:text-white text-xs font-light px-3 py-2 rounded-full hover:bg-background/40 dark:hover:bg-white/10 transition-all">Features</a>
           <a href="/pricing" className="text-foreground/80 dark:text-white/80 hover:text-foreground dark:hover:text-white text-xs font-light px-3 py-2 rounded-full hover:bg-background/40 dark:hover:bg-white/10 transition-all">Pricing</a>
           <a href="/docs" className="text-foreground/80 dark:text-white/80 hover:text-foreground dark:hover:text-white text-xs font-light px-3 py-2 rounded-full hover:bg-background/40 dark:hover:bg-white/10 transition-all">Docs</a>
+          <a href="/register" className="text-foreground/80 dark:text-white/80 hover:text-foreground dark:hover:text-white text-xs font-light px-3 py-2 rounded-full hover:bg-background/40 dark:hover:bg-white/10 transition-all">Register Company</a>
         </nav>
-        <a href="/login" className="h-8 rounded-full bg-foreground px-6 py-2 text-xs font-normal text-background dark:bg-white dark:text-black flex items-center">Sign in</a>
+        <div className="flex items-center gap-2">
+          <a href="/register" className="h-8 rounded-full border border-foreground/25 px-4 py-2 text-xs font-normal text-foreground dark:border-white/30 dark:text-white flex items-center">Start Company</a>
+          <a href="/login" className="h-8 rounded-full bg-foreground px-6 py-2 text-xs font-normal text-background dark:bg-white dark:text-black flex items-center">Sign in</a>
+        </div>
       </header>
 
       <main className="absolute bottom-8 left-8 z-20 max-w-2xl">
@@ -57,7 +61,7 @@ export default function ShaderShowcase() {
           Payroll, leave, recruitment and performance — built for Nigerian and African businesses.
         </motion.p>
         <motion.div className="flex items-center gap-6" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 1.0 }}>
-          <a href="/features" className="rounded-full bg-foreground px-10 py-4 text-sm font-medium text-background transition-all hover:opacity-90 dark:bg-white dark:text-black">See how it works</a>
+          <a href="/register" className="rounded-full bg-foreground px-10 py-4 text-sm font-medium text-background transition-all hover:opacity-90 dark:bg-white dark:text-black">Create Company Workspace</a>
           <a href="/demo" className="rounded-full border border-foreground/25 px-10 py-4 text-sm font-medium text-foreground transition-all hover:bg-background/50 dark:border-white/30 dark:text-white dark:hover:bg-white/10">Request a demo</a>
         </motion.div>
       </main>

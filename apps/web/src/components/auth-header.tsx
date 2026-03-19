@@ -9,7 +9,12 @@ export function AuthHeader() {
   const pathname = usePathname();
   const [isSignedIn, setIsSignedIn] = useState(false);
 
-  const shouldShowHeader = pathname === '/sign-in' || pathname === '/sign-up' || pathname === '/login';
+  const shouldShowHeader =
+    pathname === '/sign-in' ||
+    pathname === '/sign-up' ||
+    pathname === '/login' ||
+    pathname === '/register' ||
+    pathname === '/accept-invite';
 
   useEffect(() => {
     if (!shouldShowHeader) {

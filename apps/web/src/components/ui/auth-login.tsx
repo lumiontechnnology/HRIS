@@ -96,6 +96,9 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSubmit, errorMessage }) => {
             <p className="mt-6 text-center text-xs text-muted-foreground dark:text-white/40">
                 Lumion Technology · Privacy Policy · Terms
             </p>
+            <p className="mt-2 text-center text-xs text-muted-foreground dark:text-white/40">
+                Don't have an account? <a href="/register" className="underline underline-offset-2">Get started for your company</a>
+            </p>
             <p className="mt-6 text-center text-xs text-muted-foreground dark:text-white/40">
                 Contact your HR administrator to get access.
             </p>
