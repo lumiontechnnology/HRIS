@@ -1,10 +1,11 @@
 'use client';
 
-import { ReactNode } from 'react';
+import { ReactNode, useEffect } from 'react';
 import { Sidebar } from './sidebar';
 import { Header } from './header';
-import { useRequireAuth } from '@/lib/client-auth';
+import { useCurrentUser, useRequireAuth } from '@/lib/client-auth';
 import { Toaster } from '@lumion/ui';
+import { usePathname, useRouter } from 'next/navigation';
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -14,6 +15,22 @@ export function DashboardLayout({
   children,
 }: DashboardLayoutProps): JSX.Element {
   const { isLoading } = useRequireAuth();
+  const { user } = useCurrentUser();
+  const pathname = usePathname();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!user) return;
+
+    if (pathname === '/' && user.role === 'EMPLOYEE') {
+      router.replace('/my-dashboard');
+      return;
+    }
+
+    if (pathname === '/' && user.role === 'MANAGER') {
+      router.replace('/manager-dashboard');
+    }
+  }, [pathname, router, user]);
 
   if (isLoading) {
     return (

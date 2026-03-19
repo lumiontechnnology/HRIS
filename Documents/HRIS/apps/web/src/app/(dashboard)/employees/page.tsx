@@ -29,6 +29,7 @@ import { useQuery } from '@tanstack/react-query';
 import { DataTable, type ColumnDef } from '@/components/system/data-table';
 import { Badge, CardSkeleton, SectionHeader } from '@/components/system/primitives';
 import { TeamSwiper } from '@/components/employees/team-swiper';
+import { CsvImportDialog } from '@/components/employees/csv-import';
 import { fetchDashboardApi } from '@/lib/dashboard-api';
 import { useCurrentUser } from '@/lib/client-auth';
 
@@ -73,6 +74,7 @@ export default function EmployeesPage(): JSX.Element {
   const [departmentFilter, setDepartmentFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [locationFilter, setLocationFilter] = useState<string>('all');
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ['ui-employees', user?.id, user?.tenantId],
@@ -154,7 +156,21 @@ export default function EmployeesPage(): JSX.Element {
         title="Employees"
         description="Search and manage workforce records with operational filters."
         actions={
-          <Dialog>
+          <div className="flex items-center gap-2">
+            <a
+              href={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/v1/employees/export?format=csv`}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-md border border-border px-4 py-2 text-sm text-foreground transition-colors duration-150 hover:bg-muted"
+            >
+              Export CSV
+            </a>
+
+            <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
+              Import CSV
+            </Button>
+
+            <Dialog>
             <DialogTrigger asChild>
               <Button>
                 <Plus className="mr-2 h-4 w-4" />
@@ -181,8 +197,14 @@ export default function EmployeesPage(): JSX.Element {
                 </Button>
               </DialogFooter>
             </DialogContent>
-          </Dialog>
+            </Dialog>
+          </div>
         }
+      />
+
+      <CsvImportDialog
+        open={importDialogOpen}
+        onOpenChange={setImportDialogOpen}
       />
 
       <Card>

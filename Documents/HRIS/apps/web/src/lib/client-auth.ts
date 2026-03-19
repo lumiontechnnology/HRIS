@@ -12,6 +12,8 @@ interface CurrentUser {
   lastName: string | null;
   imageUrl: string;
   tenantId: string;
+  role: string;
+  roles: string[];
 }
 
 type PermissionLike = {
@@ -220,6 +222,15 @@ export function useCurrentUser() {
     (user?.app_metadata?.tenantId as string | undefined) ||
     '';
 
+  const rawRoles = [
+    ...toStringArray(user?.app_metadata?.roles),
+    ...toStringArray(user?.user_metadata?.roles),
+    ...(typeof user?.app_metadata?.role === 'string' ? [user.app_metadata.role] : []),
+    ...(typeof user?.user_metadata?.role === 'string' ? [user.user_metadata.role] : []),
+  ];
+  const roles = Array.from(new Set(rawRoles.map((role) => role.trim().toUpperCase())));
+  const role = roles[0] || 'EMPLOYEE';
+
   return {
     user: user
       ? ({
@@ -229,6 +240,8 @@ export function useCurrentUser() {
           lastName: (user.user_metadata?.lastName as string | null) ?? null,
           imageUrl: (user.user_metadata?.avatar_url as string | undefined) ?? '',
           tenantId,
+          role,
+          roles,
         } as CurrentUser)
       : null,
     isLoading,

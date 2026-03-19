@@ -6,39 +6,93 @@ import { cn } from '@/lib/utils';
 import { Menu, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
-const navigation = [
-  {
-    label: 'Workspace',
-    items: [
-      { href: '/', label: 'Dashboard' },
-      { href: '/employees', label: 'Employees' },
-      { href: '/org-chart', label: 'Org Chart' },
-      { href: '/onboarding', label: 'Onboarding' },
-    ],
-  },
-  {
-    label: 'Operations',
-    items: [
-      { href: '/leave', label: 'Leave' },
-      { href: '/attendance', label: 'Attendance' },
-      { href: '/payroll', label: 'Payroll' },
-      { href: '/recruitment', label: 'Recruitment' },
-      { href: '/performance', label: 'Performance' },
-      { href: '/training', label: 'Training' },
-      { href: '/assets', label: 'Assets' },
-      { href: '/reports', label: 'Reports' },
-      { href: '/settings', label: 'Settings' },
-    ],
-  },
-];
+function navigationForRole(role: string) {
+  if (role === 'EMPLOYEE') {
+    return [
+      {
+        label: 'My Workspace',
+        items: [
+          { href: '/my-dashboard', label: 'Dashboard' },
+          { href: '/my-profile', label: 'My Profile' },
+          { href: '/my-payslips', label: 'My Payslips' },
+          { href: '/my-leave', label: 'My Leave' },
+        ],
+      },
+      {
+        label: 'My Team',
+        items: [
+          { href: '/employees', label: 'Team Directory' },
+          { href: '/org-chart', label: 'Org Chart' },
+        ],
+      },
+      {
+        label: 'Help',
+        items: [
+          { href: '/reports', label: 'Company Policies' },
+          { href: '/notifications', label: 'Contact HR' },
+        ],
+      },
+    ];
+  }
+
+  if (role === 'MANAGER') {
+    return [
+      {
+        label: 'My Team',
+        items: [
+          { href: '/manager-dashboard', label: 'Team Overview' },
+          { href: '/employees', label: 'Team Members' },
+          { href: '/leave/approvals', label: 'Leave Approvals' },
+          { href: '/org-chart', label: 'Team Calendar' },
+          { href: '/reports', label: 'Team Reports' },
+        ],
+      },
+      {
+        label: 'My Profile',
+        items: [
+          { href: '/my-dashboard', label: 'Dashboard' },
+          { href: '/my-payslips', label: 'My Payslips' },
+          { href: '/my-leave', label: 'My Leave' },
+        ],
+      },
+    ];
+  }
+
+  return [
+    {
+      label: 'Workspace',
+      items: [
+        { href: '/', label: 'Dashboard' },
+        { href: '/employees', label: 'Employees' },
+        { href: '/org-chart', label: 'Org Chart' },
+        { href: '/onboarding', label: 'Onboarding' },
+      ],
+    },
+    {
+      label: 'Operations',
+      items: [
+        { href: '/leave', label: 'Leave' },
+        { href: '/attendance', label: 'Attendance' },
+        { href: '/payroll', label: 'Payroll' },
+        { href: '/recruitment', label: 'Recruitment' },
+        { href: '/performance', label: 'Performance' },
+        { href: '/training', label: 'Training' },
+        { href: '/assets', label: 'Assets' },
+        { href: '/reports', label: 'Reports' },
+        { href: '/settings', label: 'Settings' },
+      ],
+    },
+  ];
+}
 
 export function Sidebar(): JSX.Element {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const { user } = useCurrentUser();
   const supabase = createClient();
+  const navigation = useMemo(() => navigationForRole(user?.role || 'EMPLOYEE'), [user?.role]);
 
   return (
     <>

@@ -34,6 +34,21 @@ export default function SettingsPage(): JSX.Element {
             <Button variant="outline">Edit Policy Rules</Button>
           </CardContent>
         </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Role Management</CardTitle>
+            <CardDescription>Assign and revoke platform roles</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Access level updates are tracked in the audit trail and immediately affect dashboard routing.
+            </p>
+            <Button variant="outline" asChild>
+              <a href="/settings/roles">Manage roles</a>
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

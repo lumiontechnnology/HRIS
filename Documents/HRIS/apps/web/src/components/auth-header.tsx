@@ -65,20 +65,12 @@ export function AuthHeader() {
       </Link>
       <div className="flex items-center gap-2">
         {!isSignedIn ? (
-          <>
-            <Link
-              href="/sign-in"
-              className="rounded-md px-4 py-2 text-sm font-medium text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground"
-            >
-              Sign in
-            </Link>
-            <Link
-              href="/sign-up"
-              className="rounded-md bg-foreground px-4 py-2 text-sm font-medium text-background transition-opacity duration-150 hover:opacity-90"
-            >
-              Sign up
-            </Link>
-          </>
+          <Link
+            href="/sign-in"
+            className="rounded-md px-4 py-2 text-sm font-medium text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground"
+          >
+            Sign in
+          </Link>
         ) : (
           <button
             onClick={async () => {

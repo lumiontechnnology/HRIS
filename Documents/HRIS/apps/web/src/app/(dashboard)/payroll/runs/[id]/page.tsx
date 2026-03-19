@@ -29,7 +29,19 @@ interface PayrollRun {
   periodStart: string;
   periodEnd: string;
   dueDate: string;
-  status: 'DRAFT' | 'GENERATED' | 'APPROVED' | 'PROCESSING' | 'PAID';
+  status:
+    | 'DRAFT'
+    | 'GENERATED'
+    | 'PROCESSING'
+    | 'REVIEW'
+    | 'PENDING_HR'
+    | 'PENDING_HEAD_OF_HR'
+    | 'PENDING_AUDIT'
+    | 'PENDING_FINANCE'
+    | 'APPROVED'
+    | 'DISBURSED'
+    | 'PAID'
+    | 'REJECTED';
   totalAmount?: number;
   createdAt: string;
   approvedAt?: string;
@@ -41,12 +53,34 @@ interface PayrollRun {
   payslips: Payslip[];
 }
 
+interface PayrollApprovalStep {
+  step: number;
+  role: string;
+  status: 'APPROVED' | 'PENDING' | 'REJECTED' | 'BLOCKED';
+  approver: string | null;
+  at: string | null;
+}
+
+interface PayrollApprovalChainResponse {
+  data: {
+    run: { id: string; period: string; status: string; name: string };
+    steps: PayrollApprovalStep[];
+  };
+}
+
 const statusColors = {
   DRAFT: 'bg-slate-100 text-slate-800 dark:bg-slate-900/30 dark:text-slate-200',
   GENERATED: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-200',
+  REVIEW: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-200',
+  PENDING_HR: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200',
+  PENDING_HEAD_OF_HR: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200',
+  PENDING_AUDIT: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200',
+  PENDING_FINANCE: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200',
   APPROVED: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200',
   PROCESSING: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-200',
+  DISBURSED: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200',
   PAID: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200',
+  REJECTED: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-200',
 };
 
 export default function PayrollRunDetailPage(): JSX.Element {
@@ -57,6 +91,8 @@ export default function PayrollRunDetailPage(): JSX.Element {
   const { toast } = useToast();
   const [generatingPayslips, setGeneratingPayslips] = useState(false);
   const [approvingRun, setApprovingRun] = useState(false);
+  const [rejectingRun, setRejectingRun] = useState(false);
+  const [submittingRun, setSubmittingRun] = useState(false);
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['payroll-run', id],
@@ -73,6 +109,25 @@ export default function PayrollRunDetailPage(): JSX.Element {
       }
 
       return res.json();
+    },
+    enabled: !!user && !!id,
+  });
+
+  const { data: approvalChain, refetch: refetchApprovalChain } = useQuery({
+    queryKey: ['payroll-approvals', id],
+    queryFn: async () => {
+      const res = await fetch(`http://localhost:3001/api/v1/payroll/runs/${id}/approvals`, {
+        headers: {
+          'x-user-id': user?.id || '',
+          'x-tenant-id': user?.tenantId || '',
+        },
+      });
+
+      if (!res.ok) {
+        return null;
+      }
+
+      return (await res.json()) as PayrollApprovalChainResponse;
     },
     enabled: !!user && !!id,
   });
@@ -115,12 +170,13 @@ export default function PayrollRunDetailPage(): JSX.Element {
     setApprovingRun(true);
     try {
       const res = await fetch(`http://localhost:3001/api/v1/payroll/runs/${id}/approve`, {
-        method: 'PATCH',
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'x-user-id': user?.id || '',
           'x-tenant-id': user?.tenantId || '',
         },
+        body: JSON.stringify({}),
       });
 
       if (!res.ok) {
@@ -134,6 +190,7 @@ export default function PayrollRunDetailPage(): JSX.Element {
       });
 
       refetch();
+      refetchApprovalChain();
     } catch (error) {
       toast({
         title: 'Error',
@@ -142,6 +199,72 @@ export default function PayrollRunDetailPage(): JSX.Element {
       });
     } finally {
       setApprovingRun(false);
+    }
+  };
+
+  const submitRunForApproval = async () => {
+    setSubmittingRun(true);
+    try {
+      const res = await fetch(`http://localhost:3001/api/v1/payroll/runs/${id}/submit`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': user?.id || '',
+          'x-tenant-id': user?.tenantId || '',
+        },
+      });
+
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error?.message || 'Failed to submit payroll run');
+      }
+
+      toast({ title: 'Success', description: 'Payroll run submitted for approval' });
+      refetch();
+      refetchApprovalChain();
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to submit payroll run',
+        variant: 'destructive',
+      });
+    } finally {
+      setSubmittingRun(false);
+    }
+  };
+
+  const rejectRun = async () => {
+    const reason = window.prompt('Enter rejection reason');
+    if (!reason) return;
+
+    setRejectingRun(true);
+    try {
+      const res = await fetch(`http://localhost:3001/api/v1/payroll/runs/${id}/reject`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': user?.id || '',
+          'x-tenant-id': user?.tenantId || '',
+        },
+        body: JSON.stringify({ reason }),
+      });
+
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error?.message || 'Failed to reject payroll run');
+      }
+
+      toast({ title: 'Success', description: 'Payroll run rejected successfully' });
+      refetch();
+      refetchApprovalChain();
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to reject payroll run',
+        variant: 'destructive',
+      });
+    } finally {
+      setRejectingRun(false);
     }
   };
 
@@ -170,6 +293,9 @@ export default function PayrollRunDetailPage(): JSX.Element {
   }
 
   const run: PayrollRun = data.data;
+  const steps = approvalChain?.data?.steps || [];
+  const currentStep = steps.find((step) => step.status === 'PENDING');
+  const canActionCurrentStep = Boolean(currentStep && (user?.role === currentStep.role || user?.role === 'SUPER_ADMIN'));
   const startDate = new Date(run.periodStart);
   const endDate = new Date(run.periodEnd);
   const dueDate = new Date(run.dueDate);
@@ -273,24 +399,75 @@ export default function PayrollRunDetailPage(): JSX.Element {
             {run.payslips.length > 0 && (
               <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
                 <div>
-                  <p className="font-semibold">Approve Payroll Run</p>
+                  <p className="font-semibold">Submit for Approval</p>
                   <p className="text-sm text-slate-600 dark:text-slate-400">
-                    Finalize and approve all payslips for processing
+                    Move payroll from generated state into the approval chain
                   </p>
                 </div>
                 <Button
-                  onClick={approveRun}
-                  disabled={run.status !== 'GENERATED' || approvingRun}
-                  variant={run.status === 'GENERATED' ? 'default' : 'outline'}
+                  onClick={submitRunForApproval}
+                  disabled={!['REVIEW', 'GENERATED'].includes(run.status) || submittingRun}
+                  variant={['REVIEW', 'GENERATED'].includes(run.status) ? 'default' : 'outline'}
                 >
-                  <CheckCircle className="mr-2 h-4 w-4" />
-                  {approvingRun ? 'Approving...' : 'Approve'}
+                  {submittingRun ? 'Submitting...' : 'Submit'}
                 </Button>
+              </div>
+            )}
+
+            {run.payslips.length > 0 && (
+              <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
+                <div>
+                  <p className="font-semibold">Approve Current Step</p>
+                  <p className="text-sm text-slate-600 dark:text-slate-400">
+                    Approval chain is role-based and must be actioned in order
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    onClick={approveRun}
+                    disabled={!canActionCurrentStep || approvingRun}
+                    variant={canActionCurrentStep ? 'default' : 'outline'}
+                  >
+                    <CheckCircle className="mr-2 h-4 w-4" />
+                    {approvingRun ? 'Approving...' : 'Approve'}
+                  </Button>
+                  <Button
+                    onClick={rejectRun}
+                    disabled={!canActionCurrentStep || rejectingRun}
+                    variant="outline"
+                  >
+                    {rejectingRun ? 'Rejecting...' : 'Reject'}
+                  </Button>
+                </div>
               </div>
             )}
           </div>
         </CardContent>
       </Card>
+
+      {steps.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Approval Chain</CardTitle>
+            <CardDescription>HR → Head of HR → Audit → Finance</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {steps.map((step) => (
+              <div key={step.step} className="rounded-md border border-border p-4">
+                <p className="text-sm font-medium text-foreground">
+                  Step {step.step}: {step.role}
+                  {step.status === 'PENDING' && user?.role === step.role ? ' (You are here)' : ''}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Status: {step.status}
+                  {step.approver ? ` · ${step.approver}` : ''}
+                  {step.at ? ` · ${new Date(step.at).toLocaleString()}` : ''}
+                </p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Payslips */}
       {run.payslips.length > 0 && (

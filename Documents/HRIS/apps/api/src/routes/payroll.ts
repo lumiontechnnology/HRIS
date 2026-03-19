@@ -1,10 +1,88 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { prisma } from '@lumion/database';
+import { randomUUID } from 'node:crypto';
 import type { AppEnv } from '../index.js';
 import { computeNigeriaMonthlyPayroll } from '../lib/payroll/calc.js';
+import { getRolesFromContext, requireAnyRole, type Role } from '../lib/auth/rbac.js';
+import {
+  notifyPayrollDisbursed,
+  notifyPayrollRejected,
+  notifyPayrollStepApproved,
+  notifyPayrollSubmitted,
+} from '../lib/email/payroll-notifications.js';
 
 type Env = AppEnv;
+
+const APPROVAL_FLOW: Array<{ step: number; role: Role; status: string }> = [
+  { step: 1, role: 'HR_ADMIN', status: 'PENDING_HR' },
+  { step: 2, role: 'HEAD_OF_HR', status: 'PENDING_HEAD_OF_HR' },
+  { step: 3, role: 'PAYROLL_AUDITOR', status: 'PENDING_AUDIT' },
+  { step: 4, role: 'FINANCE_OFFICER', status: 'PENDING_FINANCE' },
+];
+
+const rejectSchema = z.object({
+  reason: z.string().trim().min(3, 'Reason is required').max(400),
+});
+
+const approveSchema = z.object({
+  note: z.string().trim().max(400).optional(),
+});
+
+type PayrollApprovalRow = {
+  id: string;
+  payroll_run_id: string;
+  step: number;
+  role_required: string;
+  action: 'PENDING' | 'APPROVED' | 'REJECTED';
+  approved_by: string | null;
+  note: string | null;
+  actioned_at: Date | null;
+  created_at: Date;
+};
+
+async function listApprovals(payrollRunId: string): Promise<PayrollApprovalRow[]> {
+  return prisma.$queryRawUnsafe<PayrollApprovalRow[]>(
+    `SELECT id, payroll_run_id, step, role_required, action, approved_by, note, actioned_at, created_at
+       FROM payroll_approvals
+      WHERE payroll_run_id = $1
+      ORDER BY step ASC`,
+    payrollRunId
+  );
+}
+
+async function seedApprovals(tenantId: string, payrollRunId: string): Promise<void> {
+  const existing = await listApprovals(payrollRunId);
+  if (existing.length > 0) return;
+
+  await Promise.all(
+    APPROVAL_FLOW.map((item) =>
+      prisma.$executeRawUnsafe(
+        `INSERT INTO payroll_approvals
+          (id, tenant_id, payroll_run_id, step, role_required, action, created_at)
+         VALUES ($1, $2, $3, $4, $5, 'PENDING', NOW())`,
+        randomUUID(),
+        tenantId,
+        payrollRunId,
+        item.step,
+        item.role
+      )
+    )
+  );
+}
+
+async function currentPendingApproval(payrollRunId: string): Promise<PayrollApprovalRow | null> {
+  const rows = await prisma.$queryRawUnsafe<PayrollApprovalRow[]>(
+    `SELECT id, payroll_run_id, step, role_required, action, approved_by, note, actioned_at, created_at
+       FROM payroll_approvals
+      WHERE payroll_run_id = $1 AND action = 'PENDING'
+      ORDER BY step ASC
+      LIMIT 1`,
+    payrollRunId
+  );
+
+  return rows[0] || null;
+}
 
 const PayrollRunSchema = z.object({
   payScheduleId: z.string().uuid(),
@@ -16,10 +94,15 @@ const PayrollRunSchema = z.object({
 
 const runStateTransitions: Record<string, string[]> = {
   DRAFT: ['PROCESSING'],
+  PENDING_HR: ['PENDING_HEAD_OF_HR', 'REJECTED'],
+  PENDING_HEAD_OF_HR: ['PENDING_AUDIT', 'REJECTED'],
+  PENDING_AUDIT: ['PENDING_FINANCE', 'REJECTED'],
+  PENDING_FINANCE: ['DISBURSED', 'REJECTED'],
   PROCESSING: ['REVIEW'],
   REVIEW: ['APPROVED'],
   APPROVED: ['DISBURSED'],
   DISBURSED: ['LOCKED'],
+  REJECTED: [],
   LOCKED: [],
 };
 
@@ -189,6 +272,379 @@ function buildPayslipHtml(payload: {
 
 export const createPayrollRoutes = (): Hono<Env> => {
   const app = new Hono<Env>();
+
+  app.post('/runs/:id/submit', async (c) => {
+    const denied = requireAnyRole(c, ['HR_ADMIN', 'SUPER_ADMIN']);
+    if (denied) return denied;
+
+    try {
+      const id = c.req.param('id');
+      const tenantId = c.get('tenantId');
+
+      const run = await prisma.payrollRun.findFirst({
+        where: { id, tenantId },
+        include: { payslips: { select: { grossPay: true } } },
+      });
+
+      if (!run) {
+        return c.json({ success: false, error: { code: 'NOT_FOUND', message: 'Payroll run not found' } }, 404);
+      }
+
+      if (!['DRAFT', 'REVIEW', 'GENERATED'].includes(run.status)) {
+        return c.json(
+          { success: false, error: { code: 'INVALID_STATE', message: `Cannot submit from ${run.status}` } },
+          400
+        );
+      }
+
+      await prisma.payrollRun.update({
+        where: { id },
+        data: { status: 'PENDING_HR' },
+      });
+
+      await seedApprovals(tenantId, run.id);
+
+      const hrAdmins = await prisma.user.findMany({
+        where: { tenantId, roles: { some: { name: 'HR_ADMIN' } } },
+        select: { email: true },
+      });
+
+      await notifyPayrollSubmitted({
+        to: hrAdmins.map((user) => user.email).filter(Boolean),
+        period: run.period,
+        runId: run.id,
+        totalEmployees: run.payslips.length,
+        totalGross: run.payslips.reduce((sum, payslip) => sum + Number(payslip.grossPay), 0),
+      });
+
+      await prisma.auditLog.create({
+        data: {
+          tenantId,
+          userId: c.get('userId'),
+          action: 'UPDATE',
+          resource: 'payroll_run',
+          resourceId: run.id,
+          changes: {
+            transition: 'submit',
+            status: 'PENDING_HR',
+          },
+        },
+      });
+
+      return c.json({ success: true, message: 'Payroll run submitted for approval' });
+    } catch (error) {
+      console.error('Error submitting payroll run:', error);
+      return c.json({ success: false, error: { code: 'UPDATE_ERROR', message: 'Failed to submit payroll run' } }, 500);
+    }
+  });
+
+  app.post('/runs/:id/approve', async (c) => {
+    try {
+      const id = c.req.param('id');
+      const tenantId = c.get('tenantId');
+      const userId = c.get('userId');
+      const payload = approveSchema.parse(await c.req.json().catch(() => ({})));
+
+      const run = await prisma.payrollRun.findFirst({
+        where: { id, tenantId },
+        include: {
+          payslips: {
+            include: {
+              employee: { select: { email: true } },
+            },
+          },
+        },
+      });
+
+      if (!run) {
+        return c.json({ success: false, error: { code: 'NOT_FOUND', message: 'Payroll run not found' } }, 404);
+      }
+
+      const flowItem = APPROVAL_FLOW.find((item) => item.status === run.status);
+      if (!flowItem) {
+        return c.json(
+          { success: false, error: { code: 'INVALID_STATE', message: `Run is not awaiting approval (${run.status})` } },
+          400
+        );
+      }
+
+      let pendingStep: PayrollApprovalRow | null = null;
+      try {
+        pendingStep = await currentPendingApproval(run.id);
+      } catch {
+        pendingStep = null;
+      }
+
+      const requiredRole = pendingStep?.role_required || flowItem.role;
+
+      const userRoles = getRolesFromContext(c);
+      if (!userRoles.includes(requiredRole as Role) && !userRoles.includes('SUPER_ADMIN')) {
+        return c.json({ success: false, error: { code: 'FORBIDDEN', message: 'You cannot approve this step' } }, 403);
+      }
+
+      const currentIndex = APPROVAL_FLOW.findIndex((item) => item.status === run.status);
+      const next = APPROVAL_FLOW[currentIndex + 1];
+
+      const nextStatus = next ? next.status : 'DISBURSED';
+
+      await prisma.payrollRun.update({
+        where: { id },
+        data: {
+          status: nextStatus,
+          approvedBy: userId,
+          approvedAt: new Date(),
+        },
+      });
+
+      if (pendingStep) {
+        await prisma.$executeRawUnsafe(
+          `UPDATE payroll_approvals
+              SET action = 'APPROVED', approved_by = $1, note = $2, actioned_at = NOW()
+            WHERE id = $3`,
+          userId,
+          payload.note || null,
+          pendingStep.id
+        );
+      }
+
+      const actor = await prisma.user.findUnique({ where: { id: userId }, select: { firstName: true, lastName: true } });
+      const actorName = actor ? `${actor.firstName} ${actor.lastName}`.trim() : 'System';
+
+      await prisma.auditLog.create({
+        data: {
+          tenantId,
+          userId,
+          action: 'APPROVE',
+          resource: 'payroll_run',
+          resourceId: run.id,
+          changes: {
+            from: run.status,
+            to: nextStatus,
+            note: payload.note || null,
+            step: flowItem.step,
+            roleRequired: requiredRole,
+          },
+        },
+      });
+
+      if (next) {
+        const nextApprovers = await prisma.user.findMany({
+          where: { tenantId, roles: { some: { name: next.role } } },
+          select: { email: true },
+        });
+
+        await notifyPayrollStepApproved({
+          to: nextApprovers.map((item) => item.email).filter(Boolean),
+          period: run.period,
+          runId: run.id,
+          approvedBy: actorName,
+          nextRole: next.role,
+        });
+      } else {
+        await Promise.all(
+          run.payslips.map(async (payslip) => {
+            if (!payslip.employee.email) return;
+            await notifyPayrollDisbursed({
+              to: [payslip.employee.email],
+              period: run.period,
+              netPay: Number(payslip.netPay),
+              payslipUrl: payslip.pdfUrl || `/api/v1/payroll/payslips/${payslip.id}/pdf`,
+            });
+          })
+        );
+
+        await prisma.payslip.updateMany({
+          where: { payrollRunId: run.id, sentAt: null },
+          data: { sentAt: new Date() },
+        });
+      }
+
+      return c.json({
+        success: true,
+        data: {
+          id: run.id,
+          status: nextStatus,
+        },
+        message: next ? 'Payroll step approved' : 'Payroll approved and disbursed',
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return c.json(
+          {
+            success: false,
+            error: {
+              code: 'VALIDATION_ERROR',
+              message: 'Invalid approval payload',
+              details: error.errors.map((item) => ({ field: item.path.join('.'), message: item.message })),
+            },
+          },
+          400
+        );
+      }
+
+      console.error('Error approving payroll step:', error);
+      return c.json({ success: false, error: { code: 'UPDATE_ERROR', message: 'Failed to approve payroll run' } }, 500);
+    }
+  });
+
+  app.post('/runs/:id/reject', async (c) => {
+    try {
+      const id = c.req.param('id');
+      const tenantId = c.get('tenantId');
+      const userId = c.get('userId');
+      const payload = rejectSchema.parse(await c.req.json());
+
+      const run = await prisma.payrollRun.findFirst({ where: { id, tenantId } });
+      if (!run) {
+        return c.json({ success: false, error: { code: 'NOT_FOUND', message: 'Payroll run not found' } }, 404);
+      }
+
+      const flowItem = APPROVAL_FLOW.find((item) => item.status === run.status);
+      if (!flowItem) {
+        return c.json(
+          { success: false, error: { code: 'INVALID_STATE', message: `Cannot reject from ${run.status}` } },
+          400
+        );
+      }
+
+      let pendingStep: PayrollApprovalRow | null = null;
+      try {
+        pendingStep = await currentPendingApproval(run.id);
+      } catch {
+        pendingStep = null;
+      }
+
+      const requiredRole = pendingStep?.role_required || flowItem.role;
+
+      const roles = getRolesFromContext(c);
+      if (!roles.includes(requiredRole as Role) && !roles.includes('SUPER_ADMIN')) {
+        return c.json({ success: false, error: { code: 'FORBIDDEN', message: 'You cannot reject this step' } }, 403);
+      }
+
+      await prisma.payrollRun.update({
+        where: { id: run.id },
+        data: { status: 'REJECTED', rejectedAt: new Date(), rejectionReason: payload.reason },
+      });
+
+      if (pendingStep) {
+        await prisma.$executeRawUnsafe(
+          `UPDATE payroll_approvals
+              SET action = 'REJECTED', approved_by = $1, note = $2, actioned_at = NOW()
+            WHERE id = $3`,
+          userId,
+          payload.reason,
+          pendingStep.id
+        );
+      }
+
+      await prisma.auditLog.create({
+        data: {
+          tenantId,
+          userId,
+          action: 'REJECT',
+          resource: 'payroll_run',
+          resourceId: run.id,
+          changes: {
+            from: run.status,
+            to: 'REJECTED',
+            reason: payload.reason,
+            roleRequired: requiredRole,
+          },
+        },
+      });
+
+      const hrUsers = await prisma.user.findMany({
+        where: { tenantId, roles: { some: { name: 'HR_ADMIN' } } },
+        select: { email: true },
+      });
+
+      const actor = await prisma.user.findUnique({ where: { id: userId }, select: { firstName: true, lastName: true } });
+      const actorName = actor ? `${actor.firstName} ${actor.lastName}`.trim() : 'System';
+
+      await notifyPayrollRejected({
+        to: hrUsers.map((item) => item.email).filter(Boolean),
+        period: run.period,
+        runId: run.id,
+        rejectedBy: actorName,
+        reason: payload.reason,
+      });
+
+      return c.json({ success: true, message: 'Payroll run rejected and locked for this cycle' });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return c.json(
+          {
+            success: false,
+            error: {
+              code: 'VALIDATION_ERROR',
+              message: 'Invalid rejection payload',
+              details: error.errors.map((item) => ({ field: item.path.join('.'), message: item.message })),
+            },
+          },
+          400
+        );
+      }
+
+      console.error('Error rejecting payroll run:', error);
+      return c.json({ success: false, error: { code: 'UPDATE_ERROR', message: 'Failed to reject payroll run' } }, 500);
+    }
+  });
+
+  app.get('/runs/:id/approvals', async (c) => {
+    const id = c.req.param('id');
+    const tenantId = c.get('tenantId');
+
+    const run = await prisma.payrollRun.findFirst({
+      where: { id, tenantId },
+      include: {
+        paySchedule: { select: { name: true } },
+      },
+    });
+
+    if (!run) {
+      return c.json({ success: false, error: { code: 'NOT_FOUND', message: 'Payroll run not found' } }, 404);
+    }
+
+    let steps: Array<{
+      step: number;
+      role: string;
+      status: string;
+      approver: string | null;
+      at: Date | null;
+    }> = [];
+
+    const dbApprovals = await listApprovals(run.id);
+    const approverIds = Array.from(new Set(dbApprovals.map((item) => item.approved_by).filter(Boolean))) as string[];
+    const approvers = approverIds.length
+      ? await prisma.user.findMany({ where: { id: { in: approverIds } }, select: { id: true, firstName: true, lastName: true } })
+      : [];
+    const approverMap = new Map(approvers.map((item) => [item.id, `${item.firstName} ${item.lastName}`.trim()]));
+
+    steps = APPROVAL_FLOW.map((flowStep) => {
+      const row = dbApprovals.find((item) => item.step === flowStep.step);
+      const mappedStatus = row?.action ?? (run.status === flowStep.status ? 'PENDING' : 'PENDING');
+      return {
+        step: flowStep.step,
+        role: flowStep.role,
+        status: mappedStatus,
+        approver: row?.approved_by ? approverMap.get(row.approved_by) ?? null : null,
+        at: row?.actioned_at ?? null,
+      };
+    });
+
+    return c.json({
+      success: true,
+      data: {
+        run: {
+          id: run.id,
+          period: run.period,
+          status: run.status,
+          name: run.paySchedule.name,
+        },
+        steps,
+      },
+    });
+  });
 
   /**
    * POST /api/v1/payroll/runs

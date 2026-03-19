@@ -1,15 +1,91 @@
 import { Hono } from 'hono';
-import { PrismaClient } from '@lumion/database';
+import { prisma } from '@lumion/database';
 import {
   EmployeeCreateSchema,
   EmployeeUpdateSchema,
   PaginationSchema,
 } from '@lumion/validators';
 import type { AppEnv } from '../index.js';
+import { getRolesFromContext, requireAnyRole } from '../lib/auth/rbac.js';
+
+const CSV_COLUMNS = [
+  'employee_id',
+  'first_name',
+  'middle_name',
+  'last_name',
+  'email',
+  'personal_email',
+  'phone',
+  'date_of_birth',
+  'gender',
+  'marital_status',
+  'nationality',
+  'national_id',
+  'hire_date',
+  'employment_type',
+  'job_title',
+  'department',
+  'location',
+  'manager_email',
+  'salary',
+  'currency',
+  'salary_frequency',
+  'address_street',
+  'address_city',
+  'address_state',
+  'address_country',
+  'emergency_contact_name',
+  'emergency_contact_phone',
+  'emergency_contact_relationship',
+  'bank_name',
+  'account_number',
+  'account_name',
+  'sort_code',
+];
+
+type CsvRow = Record<string, string>;
+
+function escapeCsv(value: unknown): string {
+  const text = String(value ?? '');
+  if (text.includes(',') || text.includes('"') || text.includes('\n')) {
+    return `"${text.replace(/"/g, '""')}"`;
+  }
+  return text;
+}
+
+function toCsv(rows: CsvRow[]): string {
+  const header = CSV_COLUMNS.join(',');
+  const data = rows.map((row) => CSV_COLUMNS.map((column) => escapeCsv(row[column] || '')).join(','));
+  return [header, ...data].join('\n');
+}
+
+function parseCsv(text: string): CsvRow[] {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (lines.length === 0) return [];
+
+  const headers = lines[0]
+    .split(',')
+    .map((item) => item.trim().toLowerCase().replace(/\s+/g, '_'));
+
+  const rows: CsvRow[] = [];
+  for (const line of lines.slice(1)) {
+    const values = line.split(',').map((item) => item.trim().replace(/^"|"$/g, ''));
+    const row: CsvRow = {};
+    headers.forEach((header, index) => {
+      row[header] = values[index] || '';
+    });
+    rows.push(row);
+  }
+
+  return rows;
+}
 
 export function createEmployeeRoutes(): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
-  const prisma = new PrismaClient();
 
   // ========================================================================
   // GET /api/v1/employees - List all employees
@@ -17,6 +93,8 @@ export function createEmployeeRoutes(): Hono<AppEnv> {
   app.get('/', async (c) => {
     try {
       const tenantId = c.get('tenantId');
+      const userId = c.get('userId');
+      const roles = getRolesFromContext(c);
 
       // Parse query params
       const page = parseInt(c.req.query('page') || '1');
@@ -28,11 +106,21 @@ export function createEmployeeRoutes(): Hono<AppEnv> {
       const validPagination = PaginationSchema.parse({ page, limit, sortBy, order });
 
       const skip = (validPagination.page - 1) * validPagination.limit;
+      const where: Record<string, unknown> = { tenantId };
 
       // Fetch employees
+      const managerEmployee = roles.includes('MANAGER')
+        ? await prisma.employee.findFirst({ where: { tenantId, userId } })
+        : null;
+
+      const scopedWhere = {
+        ...where,
+        ...(roles.includes('MANAGER') && managerEmployee ? { managerId: managerEmployee.id } : {}),
+      };
+
       const [employees, total] = await Promise.all([
         prisma.employee.findMany({
-          where: { tenantId },
+          where: scopedWhere,
           select: {
             id: true,
             employeeId: true,
@@ -42,6 +130,7 @@ export function createEmployeeRoutes(): Hono<AppEnv> {
             jobTitle: { select: { title: true } },
             department: { select: { name: true } },
             location: { select: { name: true } },
+            manager: { select: { firstName: true, lastName: true } },
             employmentStatus: true,
             hireDate: true,
             avatar: true,
@@ -50,7 +139,7 @@ export function createEmployeeRoutes(): Hono<AppEnv> {
           skip,
           take: validPagination.limit,
         }),
-        prisma.employee.count({ where: { tenantId } }),
+        prisma.employee.count({ where: scopedWhere }),
       ]);
 
       return c.json({
@@ -125,6 +214,414 @@ export function createEmployeeRoutes(): Hono<AppEnv> {
 
       return c.json(
         { success: false, error: 'Failed to create employee' },
+        500
+      );
+    }
+  });
+
+  app.get('/export', async (c) => {
+    const denied = requireAnyRole(c, ['HR_ADMIN', 'SUPER_ADMIN']);
+    if (denied) return denied;
+
+    const tenantId = c.get('tenantId');
+
+    const employees = await prisma.employee.findMany({
+      where: { tenantId, employmentStatus: 'ACTIVE' },
+      include: {
+        jobTitle: { select: { title: true } },
+        department: { select: { name: true } },
+        location: { select: { name: true } },
+        manager: { select: { email: true } },
+        addresses: true,
+        emergencyContacts: true,
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const rows: CsvRow[] = employees.map((employee) => ({
+      employee_id: employee.employeeId,
+      first_name: employee.firstName,
+      middle_name: employee.middleName || '',
+      last_name: employee.lastName,
+      email: employee.email,
+      personal_email: employee.personalEmail || '',
+      phone: employee.phone || '',
+      date_of_birth: employee.dateOfBirth ? employee.dateOfBirth.toISOString().slice(0, 10) : '',
+      gender: employee.gender || '',
+      marital_status: employee.maritalStatus || '',
+      nationality: employee.nationality || '',
+      national_id: employee.nationalId || '',
+      hire_date: employee.hireDate.toISOString().slice(0, 10),
+      employment_type: employee.employmentType,
+      job_title: employee.jobTitle?.title || '',
+      department: employee.department?.name || '',
+      location: employee.location?.name || '',
+      manager_email: employee.manager?.email || '',
+      salary: String(employee.salary),
+      currency: employee.currency,
+      salary_frequency: employee.salaryFrequency,
+      address_street: employee.addresses[0]?.streetAddress || '',
+      address_city: employee.addresses[0]?.city || '',
+      address_state: employee.addresses[0]?.state || '',
+      address_country: employee.addresses[0]?.country || '',
+      emergency_contact_name: employee.emergencyContacts[0]?.name || '',
+      emergency_contact_phone: employee.emergencyContacts[0]?.phone || '',
+      emergency_contact_relationship: employee.emergencyContacts[0]?.relationship || '',
+      bank_name: '',
+      account_number: '',
+      account_name: '',
+      sort_code: '',
+    }));
+
+    const csv = toCsv(rows);
+    const date = new Date().toISOString().slice(0, 10);
+
+    return new Response(csv, {
+      headers: {
+        'Content-Type': 'text/csv',
+        'Content-Disposition': `attachment; filename="lumion-employees-${date}.csv"`,
+      },
+    });
+  });
+
+  app.get('/template', async (c) => {
+    const denied = requireAnyRole(c, ['HR_ADMIN', 'SUPER_ADMIN']);
+    if (denied) return denied;
+
+    const examples: CsvRow[] = [
+      {
+        employee_id: 'LMN-1001',
+        first_name: 'Adaeze',
+        middle_name: 'Ifeoma',
+        last_name: 'Okafor',
+        email: 'adaeze.okafor@lumionhris.com',
+        personal_email: 'adaeze.okafor@gmail.com',
+        phone: '+2348012345678',
+        date_of_birth: '1993-04-09',
+        gender: 'FEMALE',
+        marital_status: 'MARRIED',
+        nationality: 'Nigerian',
+        national_id: 'NIN-12345678901',
+        hire_date: '2026-03-10',
+        employment_type: 'FULL_TIME',
+        job_title: 'Senior Software Engineer',
+        department: 'Engineering',
+        location: 'Lagos',
+        manager_email: '',
+        salary: '1200000',
+        currency: 'NGN',
+        salary_frequency: 'MONTHLY',
+        address_street: '12 Admiralty Way',
+        address_city: 'Lagos',
+        address_state: 'Lagos',
+        address_country: 'Nigeria',
+        emergency_contact_name: 'Chinedu Okafor',
+        emergency_contact_phone: '+2348098765432',
+        emergency_contact_relationship: 'Spouse',
+        bank_name: 'GTBank',
+        account_number: '0123456789',
+        account_name: 'Adaeze Okafor',
+        sort_code: '058152036',
+      },
+      {
+        employee_id: '',
+        first_name: 'Chinonso',
+        middle_name: '',
+        last_name: 'Eze',
+        email: 'chinonso.eze@lumionhris.com',
+        personal_email: '',
+        phone: '',
+        date_of_birth: '',
+        gender: 'MALE',
+        marital_status: '',
+        nationality: '',
+        national_id: '',
+        hire_date: '2026-03-12',
+        employment_type: 'FULL_TIME',
+        job_title: 'Product Designer',
+        department: 'Design',
+        location: 'Abuja',
+        manager_email: '',
+        salary: '850000',
+        currency: 'NGN',
+        salary_frequency: 'MONTHLY',
+        address_street: '',
+        address_city: '',
+        address_state: '',
+        address_country: '',
+        emergency_contact_name: '',
+        emergency_contact_phone: '',
+        emergency_contact_relationship: '',
+        bank_name: '',
+        account_number: '',
+        account_name: '',
+        sort_code: '',
+      },
+      {
+        employee_id: 'LMN-1003',
+        first_name: 'Bamidele',
+        middle_name: '',
+        last_name: 'Akinola',
+        email: 'bamidele.akinola@lumionhris.com',
+        personal_email: '',
+        phone: '+2348123456700',
+        date_of_birth: '1996-11-21',
+        gender: 'MALE',
+        marital_status: 'SINGLE',
+        nationality: 'Nigerian',
+        national_id: '',
+        hire_date: '2026-03-14',
+        employment_type: 'INTERN',
+        job_title: 'HR Intern',
+        department: 'Human Resources',
+        location: 'Lagos',
+        manager_email: 'adaeze.okafor@lumionhris.com',
+        salary: '220000',
+        currency: 'NGN',
+        salary_frequency: 'MONTHLY',
+        address_street: '4 Marina Road',
+        address_city: 'Lagos',
+        address_state: 'Lagos',
+        address_country: 'Nigeria',
+        emergency_contact_name: 'Morayo Akinola',
+        emergency_contact_phone: '+2348123456710',
+        emergency_contact_relationship: 'Mother',
+        bank_name: 'Access Bank',
+        account_number: '1234567890',
+        account_name: 'Bamidele Akinola',
+        sort_code: '044150149',
+      },
+    ];
+
+    const csv = toCsv(examples);
+    return new Response(csv, {
+      headers: {
+        'Content-Type': 'text/csv',
+        'Content-Disposition': 'attachment; filename="lumion-employees-template.csv"',
+      },
+    });
+  });
+
+  app.post('/import', async (c) => {
+    const denied = requireAnyRole(c, ['HR_ADMIN', 'SUPER_ADMIN']);
+    if (denied) return denied;
+
+    try {
+      const tenantId = c.get('tenantId');
+      const userId = c.get('userId');
+
+      const body = await c.req.parseBody();
+      const csvFile = body.csv;
+      if (!(csvFile instanceof File)) {
+        return c.json({ success: false, error: { code: 'INVALID_FILE', message: 'CSV file is required' } }, 400);
+      }
+
+      const rows = parseCsv(await csvFile.text());
+      if (rows.length === 0) {
+        return c.json({ success: false, error: { code: 'EMPTY_FILE', message: 'No rows found in CSV' } }, 400);
+      }
+
+      const [departments, jobTitles, locations, existingEmployees] = await Promise.all([
+        prisma.department.findMany({ where: { tenantId }, select: { id: true, name: true } }),
+        prisma.jobTitle.findMany({ where: { tenantId }, select: { id: true, title: true } }),
+        prisma.location.findMany({ where: { tenantId }, select: { id: true, name: true } }),
+        prisma.employee.findMany({ where: { tenantId }, select: { id: true, email: true } }),
+      ]);
+
+      if (departments.length === 0 || jobTitles.length === 0 || locations.length === 0) {
+        return c.json(
+          {
+            success: false,
+            error: {
+              code: 'REFERENCE_DATA_MISSING',
+              message: 'Departments, job titles, and locations must exist before import',
+            },
+          },
+          400
+        );
+      }
+
+      const departmentMap = new Map(departments.map((item) => [item.name.toLowerCase(), item.id]));
+      const jobTitleMap = new Map(jobTitles.map((item) => [item.title.toLowerCase(), item.id]));
+      const locationMap = new Map(locations.map((item) => [item.name.toLowerCase(), item.id]));
+      const fallbackDepartmentId = departments[0].id;
+      const fallbackJobTitleId = jobTitles[0].id;
+      const fallbackLocationId = locations[0].id;
+      const existingEmails = new Set(existingEmployees.map((item) => item.email.toLowerCase()));
+      const managerByEmail = new Map(existingEmployees.map((item) => [item.email.toLowerCase(), item.id]));
+
+      const validationErrors: Array<{ row: number; field: string; message: string }> = [];
+      const validEmploymentTypes = new Set(['FULL_TIME', 'PART_TIME', 'CONTRACT', 'INTERN']);
+      const validGenders = new Set(['MALE', 'FEMALE', 'OTHER']);
+      const validFrequencies = new Set(['MONTHLY', 'BIWEEKLY', 'WEEKLY']);
+
+      rows.forEach((row, index) => {
+        const rowNum = index + 2;
+        const requiredFields = ['first_name', 'last_name', 'email', 'hire_date'];
+
+        for (const field of requiredFields) {
+          if (!row[field]?.trim()) {
+            validationErrors.push({ row: rowNum, field, message: 'Required' });
+          }
+        }
+
+        const email = row.email?.trim().toLowerCase();
+        if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          validationErrors.push({ row: rowNum, field: 'email', message: 'Invalid email format' });
+        }
+        if (email && existingEmails.has(email)) {
+          validationErrors.push({ row: rowNum, field: 'email', message: 'Email already exists in the system' });
+        }
+
+        const department = row.department?.trim().toLowerCase();
+        if (department && !departmentMap.has(department)) {
+          validationErrors.push({ row: rowNum, field: 'department', message: `Department "${row.department}" not found` });
+        }
+
+        const jobTitle = row.job_title?.trim().toLowerCase();
+        if (jobTitle && !jobTitleMap.has(jobTitle)) {
+          validationErrors.push({ row: rowNum, field: 'job_title', message: `Job title "${row.job_title}" not found` });
+        }
+
+        const location = row.location?.trim().toLowerCase();
+        if (location && !locationMap.has(location)) {
+          validationErrors.push({ row: rowNum, field: 'location', message: `Location "${row.location}" not found` });
+        }
+
+        const managerEmail = row.manager_email?.trim().toLowerCase();
+        if (managerEmail && !managerByEmail.has(managerEmail)) {
+          validationErrors.push({ row: rowNum, field: 'manager_email', message: `Manager email "${row.manager_email}" not found` });
+        }
+
+        if (row.employment_type && !validEmploymentTypes.has(row.employment_type.toUpperCase())) {
+          validationErrors.push({
+            row: rowNum,
+            field: 'employment_type',
+            message: 'Must be one of: FULL_TIME, PART_TIME, CONTRACT, INTERN',
+          });
+        }
+        if (row.gender && !validGenders.has(row.gender.toUpperCase())) {
+          validationErrors.push({ row: rowNum, field: 'gender', message: 'Must be one of: MALE, FEMALE, OTHER' });
+        }
+        if (row.salary_frequency && !validFrequencies.has(row.salary_frequency.toUpperCase())) {
+          validationErrors.push({ row: rowNum, field: 'salary_frequency', message: 'Must be one of: MONTHLY, BIWEEKLY, WEEKLY' });
+        }
+      });
+
+      if (validationErrors.length > 0) {
+        return c.json(
+          {
+            success: false,
+            error: 'Validation failed',
+            errors: validationErrors,
+            total_rows: rows.length,
+            error_count: validationErrors.length,
+          },
+          422
+        );
+      }
+
+      const results = { created: 0, skipped: 0, errors: [] as string[] };
+
+      for (const row of rows) {
+        try {
+          const count = await prisma.employee.count({ where: { tenantId } });
+          const employeeId = row.employee_id?.trim() || `LMN-${String(count + results.created + 1).padStart(4, '0')}`;
+          const email = row.email.trim().toLowerCase();
+
+          const employee = await prisma.employee.create({
+            data: {
+              tenantId,
+              employeeId,
+              firstName: row.first_name.trim(),
+              middleName: row.middle_name?.trim() || null,
+              lastName: row.last_name.trim(),
+              email,
+              personalEmail: row.personal_email?.trim() || null,
+              phone: row.phone?.trim() || null,
+              dateOfBirth: row.date_of_birth ? new Date(row.date_of_birth) : null,
+              gender: row.gender?.toUpperCase() || null,
+              maritalStatus: row.marital_status?.toUpperCase() || null,
+              nationality: row.nationality?.trim() || null,
+              nationalId: row.national_id?.trim() || null,
+              hireDate: new Date(row.hire_date),
+              employmentType: (row.employment_type || 'FULL_TIME').toUpperCase(),
+              employmentStatus: 'ACTIVE',
+              jobTitleId: row.job_title ? jobTitleMap.get(row.job_title.toLowerCase()) || fallbackJobTitleId : fallbackJobTitleId,
+              departmentId: row.department ? departmentMap.get(row.department.toLowerCase()) || fallbackDepartmentId : fallbackDepartmentId,
+              locationId: row.location ? locationMap.get(row.location.toLowerCase()) || fallbackLocationId : fallbackLocationId,
+              managerId: row.manager_email ? managerByEmail.get(row.manager_email.toLowerCase()) || null : null,
+              salary: Number(row.salary || 0),
+              currency: row.currency || 'NGN',
+              salaryFrequency: row.salary_frequency?.toUpperCase() || 'MONTHLY',
+            },
+          });
+
+          if (row.address_street || row.address_city) {
+            await prisma.address.create({
+              data: {
+                employeeId: employee.id,
+                type: 'RESIDENTIAL',
+                streetAddress: row.address_street || '',
+                city: row.address_city || '',
+                state: row.address_state || null,
+                country: row.address_country || 'Nigeria',
+                isPrimary: true,
+              },
+            });
+          }
+
+          if (row.emergency_contact_name) {
+            await prisma.emergencyContact.create({
+              data: {
+                employeeId: employee.id,
+                name: row.emergency_contact_name,
+                phone: row.emergency_contact_phone || '',
+                relationship: row.emergency_contact_relationship || 'CONTACT',
+                isPrimary: true,
+              },
+            });
+          }
+
+          const leaveTypes = await prisma.leaveType.findMany({ where: { tenantId } });
+          if (leaveTypes.length > 0) {
+            await prisma.leaveBalance.createMany({
+              data: leaveTypes.map((leaveType) => ({
+                tenantId,
+                employeeId: employee.id,
+                leaveTypeId: leaveType.id,
+                year: new Date().getFullYear(),
+                available: 0,
+                taken: 0,
+                carried: 0,
+              })),
+            });
+          }
+
+          existingEmails.add(email);
+          managerByEmail.set(email, employee.id);
+          results.created += 1;
+        } catch (error) {
+          results.errors.push(`Row for ${row.email}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+      }
+
+      await prisma.auditLog.create({
+        data: {
+          tenantId,
+          userId,
+          action: 'CREATE',
+          resource: 'employees_bulk_import',
+          resourceId: tenantId,
+          changes: { total: rows.length, created: results.created, errors: results.errors.length },
+        },
+      });
+
+      return c.json({ success: true, ...results });
+    } catch (error) {
+      console.error('Employee import error:', error);
+      return c.json(
+        { success: false, error: { code: 'IMPORT_ERROR', message: 'Failed to import employees' } },
         500
       );
     }

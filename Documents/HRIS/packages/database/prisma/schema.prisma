@@ -560,23 +560,26 @@ model PayrollRun {
   period          String   // YYYY-MM format
   startDate       DateTime
   endDate         DateTime
-  status          String   @default("DRAFT") // DRAFT, PROCESSING, REVIEW, APPROVED, DISBURSED, LOCKED
-  
+  status          String   @default("DRAFT") // DRAFT, PROCESSING, REVIEW, PENDING_HR, PENDING_HEAD_OF_HR, PENDING_AUDIT, PENDING_FINANCE, APPROVED, DISBURSED, LOCKED, REJECTED
+
   // Approvals
-  processedBy     String?
-  processedAt     DateTime?
-  approvedBy      String?
-  approvedAt      DateTime?
-  
+  processedBy          String?
+  processedAt          DateTime?
+  approvedBy           String?
+  approvedAt           DateTime?
+  currentApproverRole  String?
+  rejectedAt           DateTime?
+  rejectionReason      String?
+
   // Relations
   tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   paySchedule     PaySchedule @relation(fields: [payScheduleId], references: [id])
-  
+
   payslips        Payslip[]
-  
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  
+
   @@unique([tenantId, payScheduleId, period])
   @@index([tenantId])
   @@index([status])
