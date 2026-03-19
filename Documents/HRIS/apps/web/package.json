@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "type-check": "tsc --noEmit",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "test:visual": "playwright test --config=playwright.config.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.3.4",
@@ -32,6 +33,7 @@
     "zod": "^3.22.4"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "@types/node": "^20.10.6",
     "@types/react": "^18.2.37",
     "@types/react-dom": "^18.2.15",

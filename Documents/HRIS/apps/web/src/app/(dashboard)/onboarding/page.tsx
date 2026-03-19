@@ -110,10 +110,10 @@ export default function OnboardingPage(): JSX.Element {
           <CardDescription>{completed} of {tasks.length} tasks completed</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="h-3 rounded bg-slate-200">
-            <div className="h-3 rounded bg-slate-900" style={{ width: `${progress}%` }} />
+          <div className="h-3 rounded bg-muted">
+            <div className="h-3 rounded bg-foreground" style={{ width: `${progress}%` }} />
           </div>
-          <p className="mt-2 text-sm text-slate-600">Current completion: {progress}%</p>
+          <p className="mt-2 text-sm text-muted-foreground">Current completion: {progress}%</p>
         </CardContent>
       </Card>
 
@@ -124,18 +124,18 @@ export default function OnboardingPage(): JSX.Element {
         </CardHeader>
         <CardContent className="space-y-3">
           {latestHires.length === 0 ? (
-            <p className="text-sm text-slate-500">No newly hired candidates waiting for onboarding.</p>
+            <p className="text-sm text-muted-foreground">No newly hired candidates waiting for onboarding.</p>
           ) : (
             latestHires.map((hire) => (
-              <div key={hire.id} className="rounded border border-slate-200 p-3">
+              <div key={hire.id} className="rounded-md border border-border p-4">
                 <div className="mb-2 flex items-center justify-between">
-                  <p className="text-sm font-semibold text-slate-900">
+                  <p className="text-sm font-medium text-foreground">
                     {hire.firstName} {hire.lastName}
                   </p>
                   <Badge tone="info">{hire.status}</Badge>
                 </div>
-                <p className="text-xs text-slate-600">{hire.email}</p>
-                <p className="mt-1 text-xs text-slate-500">
+                <p className="text-xs text-muted-foreground">{hire.email}</p>
+                <p className="mt-1 font-mono text-xs text-muted-foreground tabular-nums">
                   Hired on {new Date(hire.updatedAt).toLocaleDateString()}
                 </p>
               </div>
@@ -159,10 +159,12 @@ export default function OnboardingPage(): JSX.Element {
                   prev.map((item) => (item.id === task.id ? { ...item, done: !item.done } : item))
                 );
               }}
-              className="flex w-full items-center justify-between rounded border border-slate-200 px-3 py-2 text-left"
+              className="flex w-full items-center justify-between rounded-md border border-border px-4 py-3 text-left transition-colors duration-150 hover:bg-muted/30"
             >
-              <span className="text-sm text-slate-800">{task.label}</span>
-              <span className={`text-xs font-semibold ${task.done ? 'text-emerald-600' : 'text-slate-500'}`}>
+              <span className="text-sm text-foreground">{task.label}</span>
+              <span
+                className={`text-xs font-medium ${task.done ? 'text-[hsl(var(--success))]' : 'text-muted-foreground'}`}
+              >
                 {task.done ? 'Done' : 'Pending'}
               </span>
             </button>
@@ -189,10 +191,12 @@ export default function OnboardingPage(): JSX.Element {
           </CardHeader>
           <CardContent className="space-y-3">
             {onboardingNotifications.map((item) => (
-              <div key={item.id} className="rounded border border-slate-200 p-3">
-                <p className="text-sm font-medium text-slate-900">{item.title}</p>
-                <p className="mt-1 text-sm text-slate-600">{item.message}</p>
-                <p className="mt-1 text-xs text-slate-500">{new Date(item.createdAt).toLocaleString()}</p>
+              <div key={item.id} className="rounded-md border border-border p-4">
+                <p className="text-sm font-medium text-foreground">{item.title}</p>
+                <p className="mt-1 text-sm text-muted-foreground">{item.message}</p>
+                <p className="mt-1 font-mono text-xs text-muted-foreground tabular-nums">
+                  {new Date(item.createdAt).toLocaleString()}
+                </p>
               </div>
             ))}
           </CardContent>

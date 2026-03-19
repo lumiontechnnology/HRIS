@@ -2,10 +2,12 @@
 
 import { useParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Tabs, TabsContent, TabsList, TabsTrigger } from '@lumion/ui';
 import { Avatar, Badge, CardSkeleton, SectionHeader } from '@/components/system/primitives';
 import { fetchDashboardApi } from '@/lib/dashboard-api';
 import { useCurrentUser } from '@/lib/client-auth';
+import { createClient } from '@/lib/supabase/client';
 
 interface EmployeeDetailResponse {
   data: {
@@ -13,6 +15,7 @@ interface EmployeeDetailResponse {
     employeeId: string;
     firstName: string;
     lastName: string;
+    avatar?: string | null;
     email: string;
     phone?: string | null;
     employmentStatus: string;
@@ -26,6 +29,11 @@ interface EmployeeDetailResponse {
 export default function EmployeeProfilePage(): JSX.Element {
   const params = useParams<{ id: string }>();
   const { user } = useCurrentUser();
+  const supabase = createClient();
+  const [avatarUrl, setAvatarUrl] = useState('');
+  const [avatarError, setAvatarError] = useState<string | null>(null);
+  const [avatarSaved, setAvatarSaved] = useState<string | null>(null);
+  const [isSavingAvatar, setIsSavingAvatar] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ['ui-employee-profile', params.id, user?.id, user?.tenantId],
@@ -68,6 +76,87 @@ export default function EmployeeProfilePage(): JSX.Element {
   const managerName = `${data.manager?.firstName ?? ''} ${data.manager?.lastName ?? ''}`.trim() || 'Not Assigned';
   const statusTone = data.employmentStatus === 'ACTIVE' ? 'success' : 'warning';
 
+  const effectiveAvatar = avatarSaved || data.avatar || null;
+
+  const saveAvatar = async () => {
+    setAvatarError(null);
+    setAvatarSaved(null);
+
+    if (!avatarUrl.trim()) {
+      setAvatarError('Please enter a valid image URL.');
+      return;
+    }
+
+    setIsSavingAvatar(true);
+    try {
+      const response = await fetch(`/api/employees/${data.id}/avatar`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ avatar: avatarUrl.trim() }),
+      });
+
+      const payload = (await response.json()) as { success?: boolean; error?: string; data?: { avatar?: string } };
+
+      if (!response.ok || !payload.success || !payload.data?.avatar) {
+        setAvatarError(payload.error || 'Unable to save profile image.');
+        return;
+      }
+
+      setAvatarSaved(payload.data.avatar);
+      setAvatarUrl('');
+    } catch {
+      setAvatarError('Unable to save profile image.');
+    } finally {
+      setIsSavingAvatar(false);
+    }
+  };
+
+  const uploadAvatar = async (file: File) => {
+    setAvatarError(null);
+    setAvatarSaved(null);
+    setIsSavingAvatar(true);
+
+    try {
+      if (!file.type.startsWith('image/')) {
+        setAvatarError('Please upload an image file.');
+        return;
+      }
+
+      const extension = file.name.split('.').pop() || 'jpg';
+      const filePath = `${data.id}/${Date.now()}.${extension}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, file, { upsert: true, cacheControl: '3600' });
+
+      if (uploadError) {
+        setAvatarError(uploadError.message);
+        return;
+      }
+
+      const { data: publicUrlData } = supabase.storage.from('avatars').getPublicUrl(filePath);
+
+      const response = await fetch(`/api/employees/${data.id}/avatar`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ avatar: publicUrlData.publicUrl }),
+      });
+
+      const payload = (await response.json()) as { success?: boolean; error?: string; data?: { avatar?: string } };
+
+      if (!response.ok || !payload.success || !payload.data?.avatar) {
+        setAvatarError(payload.error || 'Unable to save uploaded profile image.');
+        return;
+      }
+
+      setAvatarSaved(payload.data.avatar);
+    } catch {
+      setAvatarError('Unable to upload profile image.');
+    } finally {
+      setIsSavingAvatar(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <SectionHeader
@@ -79,7 +168,7 @@ export default function EmployeeProfilePage(): JSX.Element {
       <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
         <Card>
           <CardHeader className="flex flex-row items-center gap-4 space-y-0">
-            <Avatar name={`${data.firstName} ${data.lastName}`} size="lg" />
+            <Avatar name={`${data.firstName} ${data.lastName}`} src={effectiveAvatar} size="lg" />
             <div>
               <CardTitle>{`${data.firstName} ${data.lastName}`.trim()}</CardTitle>
               <CardDescription>
@@ -122,6 +211,38 @@ export default function EmployeeProfilePage(): JSX.Element {
                       <p>Department: {data.department?.name || 'Unassigned'}</p>
                       <p>Role: {data.jobTitle?.title || 'Not Assigned'}</p>
                       <p>Manager: {managerName}</p>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">Profile Picture</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3 text-sm text-muted-foreground">
+                      <p>Add your own image URL to update this employee avatar.</p>
+                      <input
+                        type="url"
+                        value={avatarUrl}
+                        onChange={(event) => setAvatarUrl(event.target.value)}
+                        placeholder="https://example.com/avatar.jpg"
+                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-foreground"
+                      />
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(event) => {
+                          const selectedFile = event.target.files?.[0];
+                          if (selectedFile) {
+                            void uploadAvatar(selectedFile);
+                          }
+                        }}
+                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-foreground"
+                      />
+                      <Button onClick={saveAvatar} disabled={isSavingAvatar}>
+                        {isSavingAvatar ? 'Saving...' : 'Save Avatar'}
+                      </Button>
+                      {avatarError ? <p className="text-sm text-destructive">{avatarError}</p> : null}
+                      {avatarSaved ? <p className="text-sm text-[hsl(var(--success))]">Avatar updated successfully.</p> : null}
                     </CardContent>
                   </Card>
                 </div>

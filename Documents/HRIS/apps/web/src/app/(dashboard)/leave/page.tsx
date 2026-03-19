@@ -128,8 +128,8 @@ export default function LeavePage(): JSX.Element {
             <CardDescription>Annual Leave Requests</CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-semibold">{annualCount}</p>
-            <p className="text-xs text-slate-500">Across current data window</p>
+            <p className="font-mono text-2xl font-semibold text-foreground tabular-nums">{annualCount}</p>
+            <p className="text-xs text-muted-foreground">Across current data window</p>
           </CardContent>
         </Card>
         <Card>
@@ -137,8 +137,8 @@ export default function LeavePage(): JSX.Element {
             <CardDescription>Pending Approval</CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-semibold">{pendingCount}</p>
-            <p className="text-xs text-slate-500">Awaiting action</p>
+            <p className="font-mono text-2xl font-semibold text-foreground tabular-nums">{pendingCount}</p>
+            <p className="text-xs text-muted-foreground">Awaiting action</p>
           </CardContent>
         </Card>
         <Card>
@@ -146,8 +146,8 @@ export default function LeavePage(): JSX.Element {
             <CardDescription>Approval Throughput</CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-semibold">{Math.max(0, approvals.length - pendingCount)}</p>
-            <p className="text-xs text-slate-500">Processed requests</p>
+            <p className="font-mono text-2xl font-semibold text-foreground tabular-nums">{Math.max(0, approvals.length - pendingCount)}</p>
+            <p className="text-xs text-muted-foreground">Processed requests</p>
           </CardContent>
         </Card>
       </div>
@@ -162,7 +162,7 @@ export default function LeavePage(): JSX.Element {
             <CardDescription>{month}</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-7 gap-2 text-center text-xs text-slate-600">
+            <div className="grid grid-cols-7 gap-2 text-center text-xs text-muted-foreground">
               {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => (
                 <p key={day} className="py-1 font-semibold">{day}</p>
               ))}
@@ -173,10 +173,10 @@ export default function LeavePage(): JSX.Element {
                   key={cell.day}
                   className={`rounded border p-2 text-center text-sm ${
                     cell.state === 'request'
-                      ? 'border-amber-300 bg-amber-50'
+                      ? 'border-[hsl(var(--warning)/0.4)] bg-[hsl(var(--warning)/0.08)] text-[hsl(var(--warning))]'
                       : cell.state === 'holiday'
-                        ? 'border-sky-300 bg-sky-50'
-                        : 'border-slate-200 bg-white'
+                        ? 'border-[hsl(var(--info)/0.4)] bg-[hsl(var(--info)/0.08)] text-[hsl(var(--info))]'
+                        : 'border-border bg-card text-foreground'
                   }`}
                 >
                   {cell.day}

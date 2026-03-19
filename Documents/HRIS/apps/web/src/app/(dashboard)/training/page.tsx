@@ -3,7 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@lumion/ui';
 import { DataTable, type ColumnDef } from '@/components/system/data-table';
-import { SectionHeader, CardSkeleton } from '@/components/system/primitives';
+import { SectionHeader, CardSkeleton, Badge, KpiCard } from '@/components/system/primitives';
 import { useCurrentUser } from '@/lib/client-auth';
 import { fetchDashboardApi } from '@/lib/dashboard-api';
 
@@ -25,6 +25,17 @@ interface TrainingEnrollmentResponse {
       type: string;
     };
   }>;
+}
+
+function getTrainingTone(status: string): 'neutral' | 'success' | 'warning' | 'danger' | 'info' {
+  const normalized = status.toUpperCase();
+
+  if (normalized.includes('COMPLETE') || normalized.includes('PASSED')) return 'success';
+  if (normalized.includes('IN_PROGRESS') || normalized.includes('ONGOING')) return 'info';
+  if (normalized.includes('DUE') || normalized.includes('PENDING')) return 'warning';
+  if (normalized.includes('FAILED') || normalized.includes('OVERDUE')) return 'danger';
+
+  return 'neutral';
 }
 
 export default function TrainingPage(): JSX.Element {
@@ -52,8 +63,16 @@ export default function TrainingPage(): JSX.Element {
     { key: 'title', label: 'Training', sortable: true },
     { key: 'provider', label: 'Provider', sortable: true },
     { key: 'type', label: 'Type', sortable: true },
-    { key: 'status', label: 'Status', sortable: true },
+    {
+      key: 'status',
+      label: 'Status',
+      sortable: true,
+      render: (row) => <Badge tone={getTrainingTone(row.status)}>{row.status}</Badge>,
+    },
   ];
+
+  const completedCount = rows.filter((row) => row.status.toUpperCase().includes('COMPLETE')).length;
+  const inProgressCount = rows.filter((row) => row.status.toUpperCase().includes('PROGRESS')).length;
 
   if (isLoading) {
     return (
@@ -67,6 +86,12 @@ export default function TrainingPage(): JSX.Element {
   return (
     <div className="space-y-6">
       <SectionHeader title="Training" description="Track development plans and enrollment outcomes." />
+
+      <div className="grid gap-5 md:grid-cols-3">
+        <KpiCard label="Total Enrollments" value={String(rows.length)} hint="Current learning activity" />
+        <KpiCard label="Completed" value={String(completedCount)} hint="Marked complete" />
+        <KpiCard label="In Progress" value={String(inProgressCount)} hint="Actively underway" />
+      </div>
 
       <Card>
         <CardHeader>

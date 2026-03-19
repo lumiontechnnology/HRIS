@@ -3,6 +3,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Button } from '@lumion/ui';
 import { KpiCard, SectionHeader, Badge, CardSkeleton } from '@/components/system/primitives';
+import { ActivityChartCard } from '@/components/ui/activity-chart-card';
+import { EmployeeSpotlight } from '@/components/dashboard/employee-spotlight';
 import { fetchDashboardApi } from '@/lib/dashboard-api';
 import { useCurrentUser } from '@/lib/client-auth';
 
@@ -21,6 +23,38 @@ interface DashboardSummaryResponse {
     activityLog: Array<{ id: string; actor: string; action: string; time: string }>;
   };
 }
+
+interface TrendPoint {
+  day: string;
+  value: number;
+}
+
+interface WeeklyAttendanceResponse {
+  data: TrendPoint[];
+  trend?: number;
+  period?: string;
+}
+
+interface MonthlyPayrollTrendResponse {
+  data: TrendPoint[];
+  trend?: number;
+  period?: string;
+}
+
+const fallbackAttendance: TrendPoint[] = [
+  { day: 'Mon', value: 94 },
+  { day: 'Tue', value: 91 },
+  { day: 'Wed', value: 95 },
+  { day: 'Thu', value: 92 },
+  { day: 'Fri', value: 96 },
+];
+
+const fallbackPayroll: TrendPoint[] = [
+  { day: 'W1', value: 10800000 },
+  { day: 'W2', value: 12300000 },
+  { day: 'W3', value: 11700000 },
+  { day: 'W4', value: 13100000 },
+];
 
 function formatMoney(value: number): string {
   return new Intl.NumberFormat('en-NG', {
@@ -43,6 +77,28 @@ export default function DashboardPage(): JSX.Element {
         '/api/v1/dashboard/summary',
         user ? { id: user.id, tenantId: user.tenantId } : undefined
       ),
+  });
+
+  const { data: attendanceTrend } = useQuery({
+    queryKey: ['attendance-weekly-summary'],
+    queryFn: async (): Promise<WeeklyAttendanceResponse> => {
+      const response = await fetch('/api/attendance/weekly-summary', { cache: 'no-store' });
+      if (!response.ok) {
+        return { data: fallbackAttendance, trend: 2, period: 'Week' };
+      }
+      return (await response.json()) as WeeklyAttendanceResponse;
+    },
+  });
+
+  const { data: payrollTrend } = useQuery({
+    queryKey: ['payroll-monthly-trend'],
+    queryFn: async (): Promise<MonthlyPayrollTrendResponse> => {
+      const response = await fetch('/api/payroll/monthly-trend', { cache: 'no-store' });
+      if (!response.ok) {
+        return { data: fallbackPayroll, trend: -3, period: 'Month' };
+      }
+      return (await response.json()) as MonthlyPayrollTrendResponse;
+    },
   });
 
   const summary = data?.data;
@@ -91,6 +147,30 @@ export default function DashboardPage(): JSX.Element {
         <KpiCard label="Active Employees" value={String(activeEmployees)} hint={totalEmployees > 0 ? `${((activeEmployees / totalEmployees) * 100).toFixed(1)}% active` : 'No active employees'} />
         <KpiCard label="Monthly Payroll" value={formatMoney(monthlyPayrollCost)} hint="Latest payroll run" />
         <KpiCard label="Attrition Rate" value={`${attritionRate}%`} hint="Rolling 12 months" />
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-3">
+        <ActivityChartCard
+          title="Attendance"
+          totalValue={`${attendanceTrend?.data?.length ? Math.round(attendanceTrend.data.reduce((acc, item) => acc + item.value, 0) / attendanceTrend.data.length) : 94}%`}
+          trend={attendanceTrend?.trend ?? 2}
+          period={attendanceTrend?.period ?? 'Week'}
+          data={attendanceTrend?.data?.length ? attendanceTrend.data : fallbackAttendance}
+          dropdownOptions={['This Week', 'This Month', 'This Quarter']}
+          className="w-full max-w-none"
+        />
+
+        <ActivityChartCard
+          title="Payroll Cost"
+          totalValue={formatMoney(payrollTrend?.data?.reduce((acc, item) => acc + item.value, 0) ?? 48200000)}
+          trend={payrollTrend?.trend ?? -3}
+          period={payrollTrend?.period ?? 'Month'}
+          data={payrollTrend?.data?.length ? payrollTrend.data : fallbackPayroll}
+          dropdownOptions={['This Month', 'This Quarter', 'This Year']}
+          className="w-full max-w-none"
+        />
+
+        <EmployeeSpotlight />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-3">

@@ -86,7 +86,7 @@ export function DataTable<T extends { id: string }>({
   return (
     <div className="space-y-4">
       <div className="relative max-w-sm">
-        <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
+        <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
         <Input
           value={query}
           onChange={(event) => {
@@ -98,17 +98,17 @@ export function DataTable<T extends { id: string }>({
         />
       </div>
 
-      <div className="overflow-x-auto rounded-md border border-slate-200">
+      <div className="overflow-x-auto rounded-md border border-border bg-card">
         <table className="min-w-full text-sm">
-          <thead className="bg-slate-50 text-left text-slate-600">
+          <thead className="bg-muted/40 text-left text-muted-foreground">
             <tr>
               {columns.map((column) => (
-                <th key={String(column.key)} className="px-4 py-3 font-semibold">
+                <th key={String(column.key)} className="px-4 py-3 text-xs font-medium uppercase tracking-wide">
                   {column.sortable ? (
                     <button
                       type="button"
                       onClick={() => setSort(column.key)}
-                      className="inline-flex items-center gap-1"
+                      className="inline-flex items-center gap-1 transition-colors duration-150 hover:text-foreground"
                     >
                       {column.label}
                       {sortKey === column.key ? (
@@ -131,10 +131,14 @@ export function DataTable<T extends { id: string }>({
               <tr
                 key={row.id}
                 onClick={() => onRowClick?.(row)}
-                className={onRowClick ? 'cursor-pointer border-t border-slate-100 hover:bg-slate-50' : 'border-t border-slate-100'}
+                className={
+                  onRowClick
+                    ? 'cursor-pointer border-t border-border transition-colors duration-150 hover:bg-muted/30'
+                    : 'border-t border-border'
+                }
               >
                 {columns.map((column) => (
-                  <td key={String(column.key)} className="px-4 py-3 text-slate-800">
+                  <td key={String(column.key)} className="px-4 py-3 text-foreground">
                     {column.render ? column.render(row) : String(row[column.key] ?? '-')}
                   </td>
                 ))}
@@ -149,7 +153,7 @@ export function DataTable<T extends { id: string }>({
       ) : null}
 
       <div className="flex items-center justify-between">
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-muted-foreground">
           Showing {pageRows.length} of {sortedRows.length} results
         </p>
         <div className="flex items-center gap-2">
@@ -161,7 +165,7 @@ export function DataTable<T extends { id: string }>({
           >
             Previous
           </Button>
-          <span className="text-xs text-slate-600">
+          <span className="text-xs text-muted-foreground">
             Page {safePage} of {totalPages}
           </span>
           <Button

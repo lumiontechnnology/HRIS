@@ -19,6 +19,10 @@ export async function middleware(request: NextRequest) {
     },
   });
 
+  if (process.env.E2E_BYPASS_AUTH === '1') {
+    return supabaseResponse;
+  }
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY;
 

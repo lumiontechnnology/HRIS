@@ -170,14 +170,14 @@ export default function RecruitmentPage(): JSX.Element {
                   </CardHeader>
                   <CardContent className="space-y-3">
                     {stageCandidates.length === 0 ? (
-                      <div className="rounded border border-dashed border-slate-200 p-3 text-xs text-slate-500">
+                      <div className="rounded border border-dashed border-border p-3 text-xs text-muted-foreground">
                         No candidates in this stage.
                       </div>
                     ) : (
                       stageCandidates.map((candidate) => (
-                        <div key={candidate.id} className="rounded border border-slate-200 p-3">
+                        <div key={candidate.id} className="rounded border border-border p-3">
                           <div className="mb-2 flex items-center justify-between">
-                            <p className="text-sm font-semibold text-slate-900">{candidate.name}</p>
+                            <p className="text-sm font-medium text-foreground">{candidate.name}</p>
                             <Badge tone={candidate.score >= 85 ? 'success' : 'info'}>Score {candidate.score}</Badge>
                           </div>
                           <div className="flex flex-wrap gap-1">

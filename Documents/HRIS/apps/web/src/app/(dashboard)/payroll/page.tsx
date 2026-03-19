@@ -166,7 +166,7 @@ export default function PayrollPage(): JSX.Element {
             <CardDescription>Total Payroll</CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-semibold">{formatMoney(totals.totalPayroll)}</p>
+            <p className="font-mono text-2xl font-semibold text-foreground tabular-nums">{formatMoney(totals.totalPayroll)}</p>
           </CardContent>
         </Card>
         <Card>
@@ -174,7 +174,7 @@ export default function PayrollPage(): JSX.Element {
             <CardDescription>Total Tax</CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-semibold">{formatMoney(totals.totalTax)}</p>
+            <p className="font-mono text-2xl font-semibold text-foreground tabular-nums">{formatMoney(totals.totalTax)}</p>
           </CardContent>
         </Card>
         <Card>
@@ -182,7 +182,7 @@ export default function PayrollPage(): JSX.Element {
             <CardDescription>Total Deductions</CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-semibold">{formatMoney(totals.totalDeductions)}</p>
+            <p className="font-mono text-2xl font-semibold text-foreground tabular-nums">{formatMoney(totals.totalDeductions)}</p>
           </CardContent>
         </Card>
       </div>
@@ -193,9 +193,9 @@ export default function PayrollPage(): JSX.Element {
           <CardDescription>Draft → Processing → Review → Approved → Disbursed</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-2 text-center text-xs font-semibold uppercase tracking-wide text-slate-600 md:grid-cols-5">
+          <div className="grid gap-2 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground md:grid-cols-5">
             {['Draft', 'Processing', 'Review', 'Approved', 'Disbursed'].map((state) => (
-              <div key={state} className="rounded border border-slate-200 bg-slate-50 px-2 py-2">
+              <div key={state} className="rounded border border-border bg-muted/30 px-2 py-2">
                 {state}
               </div>
             ))}

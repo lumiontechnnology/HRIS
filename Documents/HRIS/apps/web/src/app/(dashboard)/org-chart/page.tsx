@@ -77,10 +77,10 @@ export default function OrgChartPage(): JSX.Element {
         <button
           type="button"
           onClick={() => router.push(`/employees/${node.id}`)}
-          className="w-full rounded border border-slate-200 bg-white px-4 py-3 text-left transition hover:bg-slate-50"
+          className="w-full rounded-md border border-border bg-card px-4 py-3 text-left transition-colors duration-150 hover:bg-muted/30"
         >
-          <p className="font-semibold text-slate-900">{node.name}</p>
-          <p className="text-sm text-slate-600">{node.role} • {node.department}</p>
+          <p className="font-medium text-foreground">{node.name}</p>
+          <p className="text-sm text-muted-foreground">{node.role} • {node.department}</p>
         </button>
         {reports.length > 0 ? (
           <div className="space-y-3">
@@ -99,7 +99,7 @@ export default function OrgChartPage(): JSX.Element {
       />
 
       <div className="relative max-w-sm">
-        <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
+        <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
         <Input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
@@ -120,7 +120,7 @@ export default function OrgChartPage(): JSX.Element {
               <CardSkeleton />
             </div>
           ) : roots.length === 0 ? (
-            <div className="rounded border border-dashed border-slate-200 p-6 text-sm text-slate-600">
+            <div className="rounded-md border border-dashed border-border p-6 text-sm text-muted-foreground">
               No active employees found for org chart.
             </div>
           ) : (

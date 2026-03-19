@@ -30,6 +30,7 @@ export function Badge({ children, tone = 'neutral' }: BadgeProps): JSX.Element {
 
 interface AvatarProps {
   name: string;
+  src?: string | null;
   size?: 'sm' | 'md' | 'lg';
 }
 
@@ -39,7 +40,7 @@ const avatarSizes: Record<NonNullable<AvatarProps['size']>, string> = {
   lg: 'h-16 w-16 text-xl',
 };
 
-export function Avatar({ name, size = 'md' }: AvatarProps): JSX.Element {
+export function Avatar({ name, src, size = 'md' }: AvatarProps): JSX.Element {
   const initials = name
     .split(' ')
     .map((part) => part.charAt(0).toUpperCase())
@@ -49,11 +50,15 @@ export function Avatar({ name, size = 'md' }: AvatarProps): JSX.Element {
   return (
     <div
       className={cn(
-        'inline-flex items-center justify-center rounded-full bg-slate-800 font-bold text-white',
+        'inline-flex items-center justify-center overflow-hidden rounded-full bg-foreground font-bold text-background',
         avatarSizes[size]
       )}
     >
-      {initials}
+      {src ? (
+        <img src={src} alt={name} className="h-full w-full object-cover" />
+      ) : (
+        initials
+      )}
     </div>
   );
 }
@@ -125,7 +130,7 @@ export function EmptyState({
   tone = 'default',
 }: EmptyStateProps): JSX.Element {
   return (
-    <Card className={cn(tone === 'friendly' ? 'border-border' : '')}>
+    <Card className={cn(tone === 'friendly' ? 'border-border bg-card' : '')}>
       <CardHeader>
         <CardTitle>{title}</CardTitle>
         <CardDescription>{description}</CardDescription>

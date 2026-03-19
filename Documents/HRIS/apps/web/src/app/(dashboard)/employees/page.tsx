@@ -28,6 +28,7 @@ import { Plus } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { DataTable, type ColumnDef } from '@/components/system/data-table';
 import { Badge, CardSkeleton, SectionHeader } from '@/components/system/primitives';
+import { TeamSwiper } from '@/components/employees/team-swiper';
 import { fetchDashboardApi } from '@/lib/dashboard-api';
 import { useCurrentUser } from '@/lib/client-auth';
 
@@ -35,6 +36,7 @@ interface EmployeeRow {
   id: string;
   name: string;
   employeeId: string;
+  avatar?: string | null;
   department: string;
   role: string;
   status: 'Active' | 'On Leave' | 'Probation';
@@ -46,6 +48,7 @@ interface EmployeesApiResponse {
   data: Array<{
     id: string;
     employeeId: string;
+    avatar?: string | null;
     firstName: string;
     lastName: string;
     department?: { name?: string | null } | null;
@@ -89,6 +92,7 @@ export default function EmployeesPage(): JSX.Element {
           id: item.id,
           name: `${item.firstName} ${item.lastName}`.trim(),
           employeeId: item.employeeId,
+          avatar: item.avatar,
           department: item.department?.name || 'Unassigned',
           role: item.jobTitle?.title || 'Not Assigned',
           status: mapStatus(item.employmentStatus),
@@ -112,6 +116,10 @@ export default function EmployeesPage(): JSX.Element {
     });
   }, [departmentFilter, effectiveRows, locationFilter, statusFilter]);
 
+  const mobileImageUrls = filteredRows
+    .slice(0, 8)
+    .map((row) => row.avatar || 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=400&auto=format&fit=crop');
+
   const columns: ColumnDef<EmployeeRow>[] = [
     {
       key: 'name',
@@ -119,8 +127,8 @@ export default function EmployeesPage(): JSX.Element {
       sortable: true,
       render: (row) => (
         <div>
-          <p className="font-medium text-slate-900">{row.name}</p>
-          <p className="text-xs text-slate-500">{row.employeeId}</p>
+          <p className="font-medium text-foreground">{row.name}</p>
+          <p className="font-mono text-xs text-muted-foreground tabular-nums">{row.employeeId}</p>
         </div>
       ),
     },
@@ -228,6 +236,11 @@ export default function EmployeesPage(): JSX.Element {
           <CardDescription>Row click opens employee profile</CardDescription>
         </CardHeader>
         <CardContent>
+          <div className="mb-6 md:hidden">
+            <p className="mb-3 text-xs uppercase tracking-widest text-muted-foreground">Meet The Team</p>
+            <TeamSwiper imageUrls={mobileImageUrls} />
+          </div>
+
           {isLoading ? (
             <div className="grid gap-3 md:grid-cols-3">
               <CardSkeleton />

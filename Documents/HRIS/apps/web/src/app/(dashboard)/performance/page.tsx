@@ -147,17 +147,21 @@ export default function PerformancePage(): JSX.Element {
             <CardDescription>Current cycle spread</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {distribution.map((item) => (
-              <div key={item.label}>
-                <div className="mb-1 flex items-center justify-between text-sm">
-                  <span>{item.label}</span>
-                  <span className="font-semibold">{item.value}%</span>
+            {distribution.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No cycle distribution data is currently available.</p>
+            ) : (
+              distribution.map((item) => (
+                <div key={item.label}>
+                  <div className="mb-1 flex items-center justify-between text-sm">
+                    <span className="text-foreground">{item.label}</span>
+                    <span className="font-mono font-medium text-foreground tabular-nums">{item.value}%</span>
+                  </div>
+                  <div className="h-2 rounded bg-muted">
+                    <div className="h-2 rounded bg-foreground" style={{ width: `${item.value}%` }} />
+                  </div>
                 </div>
-                <div className="h-2 rounded bg-slate-200">
-                  <div className="h-2 rounded bg-slate-900" style={{ width: `${item.value}%` }} />
-                </div>
-              </div>
-            ))}
+              ))
+            )}
           </CardContent>
         </Card>
       </div>
