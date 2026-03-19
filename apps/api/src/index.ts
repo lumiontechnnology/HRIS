@@ -45,7 +45,7 @@ const authMiddleware: MiddlewareHandler<AppEnv> = async (c, next) => {
   const fallbackUserId = c.req.header('x-user-id') || undefined;
   const fallbackTenantId = c.req.header('x-tenant-id') || undefined;
 
-  const userRecord = authUser
+  let userRecord = authUser
     ? await prisma.user.findUnique({
         where: { authUserId: authUser.id },
         include: { roles: true },
@@ -56,6 +56,74 @@ const authMiddleware: MiddlewareHandler<AppEnv> = async (c, next) => {
           include: { roles: true },
         })
       : null;
+
+  if (!userRecord) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  // Ensure every tenant has a SUPER_ADMIN and first authenticated user is promoted if none exists.
+  const superAdminCount = await prisma.user.count({
+    where: {
+      tenantId: userRecord.tenantId,
+      roles: {
+        some: { name: 'SUPER_ADMIN' },
+      },
+    },
+  });
+
+  if (superAdminCount === 0) {
+    const superAdminRole = await prisma.role.upsert({
+      where: { tenantId_name: { tenantId: userRecord.tenantId, name: 'SUPER_ADMIN' } },
+      update: {},
+      create: {
+        tenantId: userRecord.tenantId,
+        name: 'SUPER_ADMIN',
+        description: 'Tenant owner and primary administrator',
+        isBuiltIn: true,
+      },
+    });
+
+    await prisma.user.update({
+      where: { id: userRecord.id },
+      data: {
+        roles: {
+          set: [],
+          connect: [{ id: superAdminRole.id }],
+        },
+      },
+    });
+
+    userRecord = await prisma.user.findUnique({
+      where: { id: userRecord.id },
+      include: { roles: true },
+    });
+  } else if (userRecord.roles.length === 0) {
+    const employeeRole = await prisma.role.upsert({
+      where: { tenantId_name: { tenantId: userRecord.tenantId, name: 'EMPLOYEE' } },
+      update: {},
+      create: {
+        tenantId: userRecord.tenantId,
+        name: 'EMPLOYEE',
+        description: 'Default employee role',
+        isBuiltIn: true,
+      },
+    });
+
+    await prisma.user.update({
+      where: { id: userRecord.id },
+      data: {
+        roles: {
+          set: [],
+          connect: [{ id: employeeRole.id }],
+        },
+      },
+    });
+
+    userRecord = await prisma.user.findUnique({
+      where: { id: userRecord.id },
+      include: { roles: true },
+    });
+  }
 
   if (!userRecord) {
     return c.json({ error: 'Unauthorized' }, 401);

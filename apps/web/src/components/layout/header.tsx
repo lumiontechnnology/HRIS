@@ -26,6 +26,7 @@ export function Header(): JSX.Element {
               {user?.firstName} {user?.lastName}
             </p>
             <p className="text-xs text-muted-foreground">{user?.email}</p>
+            <p className="text-[10px] uppercase tracking-widest text-muted-foreground/90">{user?.role || 'EMPLOYEE'}</p>
           </div>
           <Button variant="outline" size="sm" className="hidden md:inline-flex">Quick actions</Button>
         </div>

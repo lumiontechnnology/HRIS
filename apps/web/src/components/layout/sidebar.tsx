@@ -153,6 +153,7 @@ export function Sidebar(): JSX.Element {
                 {user?.firstName} {user?.lastName}
               </p>
               <p className="text-xs text-muted-foreground">{user?.email || 'Signed in'}</p>
+              <p className="text-[10px] uppercase tracking-widest text-muted-foreground/90">{user?.role || 'EMPLOYEE'}</p>
             </div>
             <Link
               href="/settings"
