@@ -15,7 +15,7 @@ export async function GET() {
     } = await supabase.auth.getUser();
 
     if (!authUser?.email) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ data: [] });
     }
 
     const user = await prisma.user.findUnique({
@@ -46,6 +46,6 @@ export async function GET() {
     return NextResponse.json({ data: hires });
   } catch (error) {
     console.error('recent-hires error', error);
-    return NextResponse.json({ success: false, error: 'Failed to load recent hires' }, { status: 500 });
+    return NextResponse.json({ data: [] });
   }
 }

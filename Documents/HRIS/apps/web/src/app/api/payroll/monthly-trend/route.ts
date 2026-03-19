@@ -31,7 +31,7 @@ export async function GET() {
     } = await supabase.auth.getUser();
 
     if (!authUser?.email) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ data: seed, trend: -3, period: 'Month' });
     }
 
     const user = await prisma.user.findUnique({

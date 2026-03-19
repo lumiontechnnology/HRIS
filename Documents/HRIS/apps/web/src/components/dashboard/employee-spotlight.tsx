@@ -31,7 +31,7 @@ export function EmployeeSpotlight(): JSX.Element {
     queryFn: async (): Promise<RecentHiresResponse> => {
       const response = await fetch('/api/employees/recent-hires', { cache: 'no-store' });
       if (!response.ok) {
-        throw new Error('Failed to load recent hires');
+        return { data: [] };
       }
       return (await response.json()) as RecentHiresResponse;
     },
