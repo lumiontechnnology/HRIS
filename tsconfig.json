@@ -1,0 +1,31 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "useDefineForClassFields": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "strict": true,
+    "declaration": true,
+    "declarationMap": true,
+    "incremental": true,
+    "forceConsistentCasingInFileNames": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@lumion/types": ["packages/types/src/index.ts"],
+      "@lumion/validators": ["packages/validators/src/index.ts"],
+      "@lumion/ui": ["packages/ui/src/index.ts"],
+      "@lumion/database": ["packages/database/src/index.ts"]
+    }
+  },
+  "include": ["apps/**/*", "packages/**/*", "middleware.ts"],
+  "exclude": ["node_modules", "dist", ".next", "coverage"]
+}
