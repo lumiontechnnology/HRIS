@@ -4,6 +4,8 @@ import { prisma } from '@lumion/database';
 import { randomUUID } from 'node:crypto';
 import type { AppEnv } from '../index.js';
 import { computeNigeriaMonthlyPayroll } from '../lib/payroll/calc.js';
+import { getAttendanceSummary } from '../lib/payroll/attendance-feed.js';
+import { calculateProratedPayroll } from '../lib/payroll/proration.js';
 import { getRolesFromContext, requireAnyRole, type Role } from '../lib/auth/rbac.js';
 import {
   notifyPayrollDisbursed,
@@ -208,7 +210,70 @@ function buildPayslipHtml(payload: {
   taxDeduction: number;
   pensionDeduction: number;
   nhfDeduction: number;
+  finalSettlement?: {
+    proratedSalary?: number;
+    unusedLeavePayout?: number;
+    gratuity?: number;
+    grossSettlement?: number;
+    taxOnSettlement?: number;
+    loanDeduction?: number;
+    netSettlement?: number;
+  } | null;
 }): string {
+  const isFinalSettlement = !!payload.finalSettlement;
+  if (isFinalSettlement) {
+    return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Final Settlement - ${payload.employeeName}</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 24px; color: #0f172a; }
+      h1 { font-size: 24px; margin: 0 0 6px; }
+      .muted { color: #475569; font-size: 13px; margin-bottom: 14px; }
+      table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+      th, td { border: 1px solid #cbd5e1; padding: 10px; text-align: left; font-size: 14px; }
+      th { background: #f8fafc; }
+      .section-title { margin-top: 20px; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: #64748b; }
+      .net { margin-top: 18px; border: 1px solid #166534; background: #f0fdf4; border-radius: 8px; padding: 12px; }
+      .net p { margin: 0; }
+      .net .amount { font-size: 24px; font-weight: 700; color: #166534; }
+    </style>
+  </head>
+  <body>
+    <h1>Final Settlement Statement</h1>
+    <p class="muted">Employee: ${payload.employeeName} · ${payload.employeeId}</p>
+    <p class="muted">Last Payroll Period: ${payload.periodStart.toLocaleDateString()} - ${payload.periodEnd.toLocaleDateString()}</p>
+
+    <p class="section-title">Earnings</p>
+    <table>
+      <tbody>
+        <tr><td>Prorated Basic</td><td>${formatNaira(payload.finalSettlement?.proratedSalary || 0)}</td></tr>
+        <tr><td>Unused Annual Leave Payout</td><td>${formatNaira(payload.finalSettlement?.unusedLeavePayout || 0)}</td></tr>
+        <tr><td>Gratuity</td><td>${formatNaira(payload.finalSettlement?.gratuity || 0)}</td></tr>
+        <tr><td>Gross Settlement</td><td>${formatNaira(payload.finalSettlement?.grossSettlement || payload.grossPay)}</td></tr>
+      </tbody>
+    </table>
+
+    <p class="section-title">Deductions</p>
+    <table>
+      <tbody>
+        <tr><td>PAYE Tax</td><td>-${formatNaira(payload.finalSettlement?.taxOnSettlement || payload.taxDeduction)}</td></tr>
+        <tr><td>Pension</td><td>-${formatNaira(payload.pensionDeduction)}</td></tr>
+        <tr><td>NHF</td><td>-${formatNaira(payload.nhfDeduction)}</td></tr>
+        <tr><td>Outstanding Loan Repayment</td><td>-${formatNaira(payload.finalSettlement?.loanDeduction || 0)}</td></tr>
+      </tbody>
+    </table>
+
+    <div class="net">
+      <p>Net Final Settlement</p>
+      <p class="amount">${formatNaira(payload.finalSettlement?.netSettlement || payload.netPay)}</p>
+    </div>
+  </body>
+</html>`;
+  }
+
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -896,25 +961,111 @@ export const createPayrollRoutes = (): Hono<Env> => {
         },
       });
 
-      // Get all active employees
+      // Get all active employees while excluding workers who exited before this payroll window.
       const employees = await prisma.employee.findMany({
         where: {
           tenantId,
           employmentStatus: 'ACTIVE',
+          OR: [
+            { terminationDate: null },
+            { terminationDate: { gte: run.startDate } },
+          ],
         },
         select: {
           id: true,
           firstName: true,
           lastName: true,
           salary: true,
+          hireDate: true,
+          terminationDate: true,
         },
       });
 
       // Generate payslips
       const payslips = await Promise.all(
         employees.map(async (emp) => {
-          const grossPay = Number(emp.salary || 0);
-          const computed = computeNigeriaMonthlyPayroll(grossPay);
+          const monthlySalary = Number(emp.salary || 0);
+          const attendance = await getAttendanceSummary(
+            emp.id,
+            run.startDate.toISOString(),
+            run.endDate.toISOString(),
+            tenantId
+          );
+
+          const totalWorkingDays = Math.max(attendance.totalWorkingDays, 1);
+          const dailyRate = monthlySalary / totalWorkingDays;
+          const absentDeduction = dailyRate * attendance.daysAbsent;
+          const halfDayDeduction = (dailyRate / 2) * attendance.daysHalfDay;
+          const hourlyRate = monthlySalary / (totalWorkingDays * 8);
+          const overtimePay = hourlyRate * attendance.totalOvertimeHrs * 1.5;
+          const attendanceBasedGross = monthlySalary - absentDeduction - halfDayDeduction + overtimePay;
+
+          const hasExitInPeriod = !!emp.terminationDate && emp.terminationDate <= run.endDate;
+
+          const computed = hasExitInPeriod
+            ? await calculateProratedPayroll({
+                employeeId: emp.id,
+                tenantId,
+                salary: monthlySalary,
+                basicSalary: monthlySalary,
+                hireDate: emp.hireDate,
+                terminationDate: emp.terminationDate as Date,
+                periodStart: run.startDate.toISOString(),
+                periodEnd: run.endDate.toISOString(),
+                attendance,
+              })
+            : computeNigeriaMonthlyPayroll(attendanceBasedGross);
+          const computedAny = computed as unknown as Record<string, unknown>;
+          const totalDeductions = Number(
+            computedAny.totalDeductions ?? computedAny.deductions ?? 0
+          );
+
+          const isProrated = hasExitInPeriod;
+
+          const earnings = isProrated
+            ? [
+                {
+                  component: `Prorated Basic (${(computed as Awaited<ReturnType<typeof calculateProratedPayroll>>).workedDays} of ${(computed as Awaited<ReturnType<typeof calculateProratedPayroll>>).totalWorkingDays} working days)`,
+                  amount: (computed as Awaited<ReturnType<typeof calculateProratedPayroll>>).proratedSalary,
+                },
+                {
+                  component: `Unused Annual Leave Payout (${(computed as Awaited<ReturnType<typeof calculateProratedPayroll>>).unusedLeaveDays} days)`,
+                  amount: (computed as Awaited<ReturnType<typeof calculateProratedPayroll>>).unusedLeavePayout,
+                },
+                { component: 'Gratuity', amount: (computed as Awaited<ReturnType<typeof calculateProratedPayroll>>).gratuity },
+              ]
+            : [
+                { component: 'Base Salary', amount: monthlySalary },
+                { component: 'Attendance Absent Deduction', amount: -absentDeduction },
+                { component: 'Half Day Deduction', amount: -halfDayDeduction },
+                { component: 'Overtime Pay', amount: overtimePay },
+              ];
+
+          const deductionDetails = [
+            { component: 'PAYE Tax', amount: computed.payeTax },
+            { component: 'Pension', amount: computed.pension },
+            { component: 'NHF', amount: computed.nhf },
+            ...(isProrated
+              ? [{ component: 'Outstanding Loan Repayment', amount: (computed as Awaited<ReturnType<typeof calculateProratedPayroll>>).loanDeduction }]
+              : []),
+          ];
+
+          const notes = {
+            attendanceSummary: attendance,
+            absentDeduction,
+            halfDayDeduction,
+            overtimePay,
+            dailyRate,
+            attendanceRate: attendance.attendanceRate,
+            isProrated,
+            ...(isProrated
+              ? {
+                  finalSettlement: (computed as Awaited<ReturnType<typeof calculateProratedPayroll>>).finalSettlement,
+                  exitDate: emp.terminationDate,
+                }
+              : {}),
+          };
+              const notesJson = JSON.stringify(notes);
 
           return prisma.payslip.upsert({
             where: {
@@ -925,14 +1076,10 @@ export const createPayrollRoutes = (): Hono<Env> => {
             },
             update: {
               grossPay: computed.grossPay,
-              deductions: computed.totalDeductions,
+              deductions: totalDeductions,
               netPay: computed.netPay,
-              earnings: [{ component: 'Basic Salary', amount: computed.grossPay }],
-              deductionDetails: [
-                { component: 'PAYE Tax', amount: computed.payeTax },
-                { component: 'Pension', amount: computed.pension },
-                { component: 'NHF', amount: computed.nhf },
-              ],
+              earnings,
+              deductionDetails: [...deductionDetails, { component: 'Meta', amount: 0, notes: notesJson }],
               pdfUrl: payslipStorageUrl(tenantId, id, `employee-${emp.id}`),
             },
             create: {
@@ -940,14 +1087,10 @@ export const createPayrollRoutes = (): Hono<Env> => {
               payrollRunId: id,
               employeeId: emp.id,
               grossPay: computed.grossPay,
-              deductions: computed.totalDeductions,
+              deductions: totalDeductions,
               netPay: computed.netPay,
-              earnings: [{ component: 'Basic Salary', amount: computed.grossPay }],
-              deductionDetails: [
-                { component: 'PAYE Tax', amount: computed.payeTax },
-                { component: 'Pension', amount: computed.pension },
-                { component: 'NHF', amount: computed.nhf },
-              ],
+              earnings,
+              deductionDetails: [...deductionDetails, { component: 'Meta', amount: 0, notes: notesJson }],
               pdfUrl: payslipStorageUrl(tenantId, id, `employee-${emp.id}`),
             },
           });
@@ -1349,6 +1492,31 @@ export const createPayrollRoutes = (): Hono<Env> => {
       }
 
       const details = Array.isArray(payslip.deductionDetails) ? payslip.deductionDetails : [];
+      const metaEntry = (details as Array<{ component?: unknown; notes?: unknown }>).find(
+        (row) => String(row.component || '').toUpperCase() === 'META'
+      );
+      const metaNotes =
+        typeof metaEntry?.notes === 'string'
+          ? (() => {
+              try {
+                return JSON.parse(metaEntry.notes) as Record<string, unknown>;
+              } catch {
+                return null;
+              }
+            })()
+          : null;
+      const finalSettlement =
+        metaNotes && typeof metaNotes.finalSettlement === 'object'
+          ? (metaNotes.finalSettlement as {
+              proratedSalary?: number;
+              unusedLeavePayout?: number;
+              gratuity?: number;
+              grossSettlement?: number;
+              taxOnSettlement?: number;
+              loanDeduction?: number;
+              netSettlement?: number;
+            })
+          : null;
       const amountFor = (component: string): number => {
         const entry = (details as Array<{ component?: unknown; amount?: unknown }>).find(
           (row) => String(row.component || '').toUpperCase() === component.toUpperCase()
@@ -1371,6 +1539,7 @@ export const createPayrollRoutes = (): Hono<Env> => {
         taxDeduction: amountFor('PAYE TAX'),
         pensionDeduction: amountFor('PENSION'),
         nhfDeduction: amountFor('NHF'),
+        finalSettlement,
       });
 
       return c.html(html);

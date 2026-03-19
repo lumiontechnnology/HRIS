@@ -5,8 +5,56 @@ import {
   EmployeeUpdateSchema,
   PaginationSchema,
 } from '@lumion/validators';
+import { z } from 'zod';
+import { randomUUID } from 'node:crypto';
 import type { AppEnv } from '../index.js';
 import { getRolesFromContext, requireAnyRole } from '../lib/auth/rbac.js';
+
+const EXIT_TYPES = [
+  'RESIGNATION',
+  'TERMINATION',
+  'REDUNDANCY',
+  'RETIREMENT',
+  'CONTRACT_END',
+  'DEATH',
+  'ABANDONMENT',
+  'MUTUAL_AGREEMENT',
+] as const;
+
+const ExitEmployeeSchema = z.object({
+  exitType: z.enum(EXIT_TYPES),
+  noticeDate: z.string().date(),
+  lastWorkingDay: z.string().date(),
+  exitReason: z.string().trim().max(1000).optional(),
+  exitInterviewNotes: z.string().trim().max(2000).optional(),
+  isEligibleRehire: z.boolean().optional(),
+  rehireNotes: z.string().trim().max(1000).optional(),
+});
+
+const RehireEmployeeSchema = z.object({
+  newHireDate: z.string().date(),
+  newJobTitle: z.string().min(1),
+  newDepartment: z.string().min(1),
+  newSalary: z.number().positive(),
+  newManagerId: z.string().optional(),
+  rehireReason: z.string().trim().min(3).max(1000),
+});
+
+const OFFBOARDING_TASKS: Array<{ assigneeRole: string; title: string; dueDays: number }> = [
+  { assigneeRole: 'IT', title: 'Revoke system access', dueDays: 0 },
+  { assigneeRole: 'IT', title: 'Collect company laptop', dueDays: 0 },
+  { assigneeRole: 'IT', title: 'Collect access card/key fob', dueDays: 0 },
+  { assigneeRole: 'HR', title: 'Conduct exit interview', dueDays: -3 },
+  { assigneeRole: 'HR', title: 'Process final settlement', dueDays: 7 },
+  { assigneeRole: 'HR', title: 'Issue experience letter', dueDays: 7 },
+  { assigneeRole: 'HR', title: 'Update pension remittance', dueDays: 30 },
+  { assigneeRole: 'FINANCE', title: 'Process final payroll', dueDays: 7 },
+  { assigneeRole: 'FINANCE', title: 'Settle expense claims', dueDays: 7 },
+  { assigneeRole: 'MANAGER', title: 'Collect project handover notes', dueDays: -5 },
+  { assigneeRole: 'MANAGER', title: 'Update team task assignments', dueDays: 0 },
+  { assigneeRole: 'EMPLOYEE', title: 'Return all company property', dueDays: 0 },
+  { assigneeRole: 'EMPLOYEE', title: 'Hand over ongoing projects', dueDays: -3 },
+];
 
 const CSV_COLUMNS = [
   'employee_id',
@@ -101,12 +149,19 @@ export function createEmployeeRoutes(): Hono<AppEnv> {
       const limit = parseInt(c.req.query('limit') || '20');
       const sortBy = c.req.query('sortBy') || 'createdAt';
       const order = (c.req.query('order') || 'desc') as 'asc' | 'desc';
+      const includeExited = c.req.query('includeExited') === 'true';
+      const statusFilter = c.req.query('status');
 
       // Validate pagination
       const validPagination = PaginationSchema.parse({ page, limit, sortBy, order });
 
       const skip = (validPagination.page - 1) * validPagination.limit;
       const where: Record<string, unknown> = { tenantId };
+      if (statusFilter) {
+        where.employmentStatus = statusFilter;
+      } else if (!includeExited) {
+        where.employmentStatus = { notIn: ['EXITED'] };
+      }
 
       // Fetch employees
       const managerEmployee = roles.includes('MANAGER')
@@ -628,6 +683,356 @@ export function createEmployeeRoutes(): Hono<AppEnv> {
   });
 
   // ========================================================================
+  // GET /api/v1/employees/exited - List exited employees
+  // ========================================================================
+  app.get('/exited', async (c) => {
+    const denied = requireAnyRole(c, ['HR_ADMIN', 'SUPER_ADMIN', 'HEAD_OF_HR']);
+    if (denied) return denied;
+
+    try {
+      const tenantId = c.get('tenantId');
+      const q = (c.req.query('q') || '').trim();
+      const exitType = c.req.query('exitType');
+      const year = c.req.query('year');
+
+      const employees = await prisma.employee.findMany({
+        where: {
+          tenantId,
+          employmentStatus: 'EXITED',
+          ...(q
+            ? {
+                OR: [
+                  { firstName: { contains: q, mode: 'insensitive' } },
+                  { lastName: { contains: q, mode: 'insensitive' } },
+                  { employeeId: { contains: q, mode: 'insensitive' } },
+                ],
+              }
+            : {}),
+        },
+        select: {
+          id: true,
+          employeeId: true,
+          firstName: true,
+          lastName: true,
+          terminationDate: true,
+        },
+        orderBy: { terminationDate: 'desc' },
+      });
+
+      const exitRows = await prisma.$queryRawUnsafe<
+        Array<{
+          employeeId: string;
+          exitType: string;
+          exitStatus: string;
+          lastWorkingDay: Date;
+          isEligibleRehire: boolean;
+        }>
+      >(
+        `SELECT DISTINCT ON ("employeeId")
+            "employeeId", "exitType", "exitStatus", "lastWorkingDay", "isEligibleRehire"
+         FROM "EmployeeExit"
+         WHERE "tenantId" = $1
+         ORDER BY "employeeId", "createdAt" DESC`,
+        tenantId
+      );
+
+      const exitByEmployeeId = new Map(exitRows.map((row) => [row.employeeId, row]));
+
+      const filtered = employees
+        .map((employee) => {
+          const exit = exitByEmployeeId.get(employee.id);
+          return {
+            id: employee.id,
+            employeeId: employee.employeeId,
+            firstName: employee.firstName,
+            lastName: employee.lastName,
+            terminationDate: employee.terminationDate,
+            exitType: exit?.exitType || null,
+            exitStatus: exit?.exitStatus || null,
+            lastWorkingDay: exit?.lastWorkingDay || employee.terminationDate,
+            isEligibleRehire: exit?.isEligibleRehire ?? true,
+          };
+        })
+        .filter((row) => {
+          const byType = exitType ? row.exitType === exitType : true;
+          const byYear = year
+            ? String((row.lastWorkingDay ? new Date(row.lastWorkingDay).getUTCFullYear() : '')) === year
+            : true;
+          return byType && byYear;
+        });
+
+      return c.json({ success: true, data: filtered, total: filtered.length });
+    } catch (error) {
+      console.error('Error fetching exited employees:', error);
+      return c.json({ success: false, error: 'Failed to fetch exited employees' }, 500);
+    }
+  });
+
+  // ========================================================================
+  // POST /api/v1/employees/:id/exit - Initiate employee exit workflow
+  // ========================================================================
+  app.post('/:id/exit', async (c) => {
+    const denied = requireAnyRole(c, ['HR_ADMIN', 'SUPER_ADMIN', 'HEAD_OF_HR']);
+    if (denied) return denied;
+
+    try {
+      const tenantId = c.get('tenantId');
+      const userId = c.get('userId');
+      const employeeId = c.req.param('id');
+      const payload = ExitEmployeeSchema.parse(await c.req.json());
+
+      const employee = await prisma.employee.findFirst({
+        where: { id: employeeId, tenantId },
+        include: {
+          jobTitle: { select: { title: true } },
+          department: { select: { name: true } },
+        },
+      });
+
+      if (!employee) {
+        return c.json({ success: false, error: 'Employee not found' }, 404);
+      }
+
+      const noticeDate = new Date(payload.noticeDate);
+      const lastWorkingDay = new Date(payload.lastWorkingDay);
+      if (lastWorkingDay < noticeDate) {
+        return c.json({ success: false, error: 'lastWorkingDay cannot be before noticeDate' }, 400);
+      }
+
+      const exitRecordRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+        `INSERT INTO "EmployeeExit" (
+            "id", "tenantId", "employeeId", "exitType", "exitStatus", "noticeDate", "lastWorkingDay",
+            "exitReason", "exitInterviewNotes", "isEligibleRehire", "rehireNotes", "processedByUserId", "createdAt", "updatedAt"
+          ) VALUES (
+            $1, $2, $3, $4, 'NOTICE_PERIOD', $5::date, $6::date,
+            $7, $8, $9, $10, $11, now(), now()
+          ) RETURNING id`,
+        randomUUID(),
+        tenantId,
+        employee.id,
+        payload.exitType,
+        payload.noticeDate,
+        payload.lastWorkingDay,
+        payload.exitReason || null,
+        payload.exitInterviewNotes || null,
+        payload.isEligibleRehire ?? true,
+        payload.rehireNotes || null,
+        userId
+      );
+
+      await prisma.employee.update({
+        where: { id: employee.id },
+        data: {
+          employmentStatus: 'NOTICE_PERIOD',
+          terminationDate: new Date(payload.lastWorkingDay),
+        },
+      });
+
+      await prisma.leaveRequest.updateMany({
+        where: {
+          employeeId: employee.id,
+          status: { in: ['SUBMITTED', 'PENDING'] },
+          startDate: { gt: new Date() },
+        },
+        data: {
+          status: 'CANCELLED',
+          reason: 'Cancelled due to employee exit',
+        },
+      });
+
+      for (const task of OFFBOARDING_TASKS) {
+        const due = new Date(lastWorkingDay);
+        due.setUTCDate(due.getUTCDate() + task.dueDays);
+
+        await prisma.$executeRawUnsafe(
+          `INSERT INTO "OffboardingTask" (
+             "id", "tenantId", "employeeId", "exitRecordId", "assigneeRole", "title", "dueDate", "status", "createdAt", "updatedAt"
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7::date, 'PENDING', now(), now())`,
+          randomUUID(),
+          tenantId,
+          employee.id,
+          exitRecordRows[0]?.id || null,
+          task.assigneeRole,
+          task.title,
+          due.toISOString().slice(0, 10)
+        );
+      }
+
+      await prisma.$executeRawUnsafe(
+        `UPDATE "EmploymentHistory"
+            SET "exitDate" = $1::date,
+                "exitType" = $2,
+                "finalSalary" = $3,
+                "notes" = COALESCE("notes", '') || $4
+          WHERE "employeeId" = $5
+            AND "exitDate" IS NULL`,
+        payload.lastWorkingDay,
+        payload.exitType,
+        Number(employee.salary),
+        `\nExited on ${payload.lastWorkingDay}`,
+        employee.id
+      );
+
+      await prisma.auditLog.create({
+        data: {
+          tenantId,
+          userId,
+          action: 'UPDATE',
+          resource: 'employee_exit',
+          resourceId: employee.id,
+          changes: {
+            event: 'EMPLOYEE_EXIT_INITIATED',
+            payload,
+          },
+        },
+      });
+
+      return c.json({ success: true, exitRecordId: exitRecordRows[0]?.id || null });
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return c.json({ success: false, error: 'Invalid request', details: error.errors }, 400);
+      }
+      console.error('Error initiating employee exit:', error);
+      return c.json({ success: false, error: 'Failed to initiate employee exit' }, 500);
+    }
+  });
+
+  // ========================================================================
+  // POST /api/v1/employees/:id/rehire - Rehire exited employee
+  // ========================================================================
+  app.post('/:id/rehire', async (c) => {
+    const denied = requireAnyRole(c, ['HR_ADMIN', 'SUPER_ADMIN', 'HEAD_OF_HR']);
+    if (denied) return denied;
+
+    try {
+      const tenantId = c.get('tenantId');
+      const userId = c.get('userId');
+      const employeePk = c.req.param('id');
+      const payload = RehireEmployeeSchema.parse(await c.req.json());
+
+      const employee = await prisma.employee.findFirst({ where: { id: employeePk, tenantId } });
+      if (!employee) {
+        return c.json({ success: false, error: 'Employee not found' }, 404);
+      }
+
+      const [latestExit] = await prisma.$queryRawUnsafe<
+        Array<{ id: string; isEligibleRehire: boolean; rehireNotes: string | null }>
+      >(
+        `SELECT id, "isEligibleRehire", "rehireNotes"
+           FROM "EmployeeExit"
+          WHERE "employeeId" = $1
+          ORDER BY "createdAt" DESC
+          LIMIT 1`,
+        employee.id
+      );
+
+      if (!latestExit?.isEligibleRehire) {
+        return c.json(
+          {
+            success: false,
+            error: 'This employee is not marked as eligible for rehire',
+            notes: latestExit?.rehireNotes || null,
+          },
+          403
+        );
+      }
+
+      const tenantEmployeeCount = await prisma.employee.count({ where: { tenantId } });
+      const newEmployeeCode = `LMN-${String(tenantEmployeeCount + 1).padStart(4, '0')}`;
+
+      await prisma.employee.update({
+        where: { id: employee.id },
+        data: {
+          employmentStatus: 'ACTIVE',
+          hireDate: new Date(payload.newHireDate),
+          terminationDate: null,
+          jobTitleId: payload.newJobTitle,
+          departmentId: payload.newDepartment,
+          salary: payload.newSalary,
+          managerId: payload.newManagerId || null,
+          employeeId: newEmployeeCode,
+        },
+      });
+
+      if (latestExit?.id) {
+        await prisma.$executeRawUnsafe(
+          `UPDATE "EmployeeExit"
+              SET "exitStatus" = 'REHIRED', "updatedAt" = now()
+            WHERE id = $1`,
+          latestExit.id
+        );
+      }
+
+      const [latestStint] = await prisma.$queryRawUnsafe<Array<{ stintNumber: number }>>(
+        `SELECT COALESCE(MAX("stintNumber"), 0) AS "stintNumber"
+           FROM "EmploymentHistory"
+          WHERE "employeeId" = $1`,
+        employee.id
+      );
+
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO "EmploymentHistory" (
+            "id", "tenantId", "employeeId", "stintNumber", "hireDate", "jobTitle", "department", "finalSalary", "notes", "createdAt"
+          ) VALUES ($1, $2, $3, $4, $5::date, $6, $7, $8, $9, now())`,
+        randomUUID(),
+        tenantId,
+        employee.id,
+        (latestStint?.stintNumber || 0) + 1,
+        payload.newHireDate,
+        payload.newJobTitle,
+        payload.newDepartment,
+        payload.newSalary,
+        `Rehired: ${payload.rehireReason}`
+      );
+
+      await prisma.leaveBalance.deleteMany({ where: { employeeId: employee.id } });
+
+      const leaveTypes = await prisma.leaveType.findMany({ where: { tenantId }, select: { id: true, code: true } });
+      const year = new Date(payload.newHireDate).getUTCFullYear();
+
+      for (const leaveType of leaveTypes) {
+        const code = leaveType.code.toUpperCase();
+        const defaultAllocation = code.includes('ANNUAL') ? 24 : code.includes('SICK') ? 12 : 0;
+
+        await prisma.leaveBalance.create({
+          data: {
+            tenantId,
+            employeeId: employee.id,
+            leaveTypeId: leaveType.id,
+            year,
+            available: defaultAllocation,
+            taken: 0,
+            carried: 0,
+          },
+        });
+      }
+
+      await prisma.auditLog.create({
+        data: {
+          tenantId,
+          userId,
+          action: 'UPDATE',
+          resource: 'employee_rehire',
+          resourceId: employee.id,
+          changes: {
+            event: 'EMPLOYEE_REHIRED',
+            payload,
+            newEmployeeCode,
+          },
+        },
+      });
+
+      return c.json({ success: true, newEmployeeId: newEmployeeCode });
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return c.json({ success: false, error: 'Invalid request', details: error.errors }, 400);
+      }
+      console.error('Error rehiring employee:', error);
+      return c.json({ success: false, error: 'Failed to rehire employee' }, 500);
+    }
+  });
+
+  // ========================================================================
   // GET /api/v1/employees/:id - Get single employee
   // ========================================================================
   app.get('/:id', async (c) => {
@@ -657,9 +1062,39 @@ export function createEmployeeRoutes(): Hono<AppEnv> {
         );
       }
 
+      const [latestExit] = await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(
+        `SELECT *
+           FROM "EmployeeExit"
+          WHERE "employeeId" = $1
+          ORDER BY "createdAt" DESC
+          LIMIT 1`,
+        employee.id
+      );
+
+      const history = await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(
+        `SELECT *
+           FROM "EmploymentHistory"
+          WHERE "employeeId" = $1
+          ORDER BY "stintNumber" ASC`,
+        employee.id
+      );
+
+      const offboardingTasks = await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(
+        `SELECT *
+           FROM "OffboardingTask"
+          WHERE "employeeId" = $1
+          ORDER BY "dueDate" ASC`,
+        employee.id
+      );
+
       return c.json({
         success: true,
-        data: employee,
+        data: {
+          ...employee,
+          latestExit: latestExit || null,
+          employmentHistory: history,
+          offboardingTasks,
+        },
       });
     } catch (error) {
       console.error('Error fetching employee:', error);

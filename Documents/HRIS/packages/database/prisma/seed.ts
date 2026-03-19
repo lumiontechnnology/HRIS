@@ -2,6 +2,10 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
+function toDateOnly(value: string): Date {
+  return new Date(`${value}T00:00:00.000Z`);
+}
+
 async function main(): Promise<void> {
   console.log('Starting seed...');
 
@@ -19,6 +23,23 @@ async function main(): Promise<void> {
   });
 
   console.log('Created tenant:', tenant.id);
+
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO "WorkSchedule" (
+        "id", "tenantId", "workDays", "workStart", "workEnd", "graceMinutes", "overtimeAfter", "updatedAt"
+      ) VALUES ($1, $2, ARRAY['MON','TUE','WED','THU','FRI'], '08:00', '17:00', 15, 8.0, now())
+      ON CONFLICT ("tenantId") DO UPDATE
+      SET "workDays" = EXCLUDED."workDays",
+          "workStart" = EXCLUDED."workStart",
+          "workEnd" = EXCLUDED."workEnd",
+          "graceMinutes" = EXCLUDED."graceMinutes",
+          "overtimeAfter" = EXCLUDED."overtimeAfter",
+          "updatedAt" = now()`,
+    `ws_${tenant.id.slice(0, 12)}`,
+    tenant.id
+  );
+
+  console.log('Seeded default work schedule');
 
   // Create locations
   const lagoLocation = await prisma.location.upsert({
@@ -169,8 +190,18 @@ async function main(): Promise<void> {
   });
 
   // Create other employees with CTO as manager
-  const seniorEngineer1 = await prisma.employee.create({
-    data: {
+  const seniorEngineer1 = await prisma.employee.upsert({
+    where: { tenantId_email: { tenantId: tenant.id, email: 'chioma.adeyemi@lumiontech.com' } },
+    update: {
+      managerId: ctoEmployee.id,
+      employmentStatus: 'ACTIVE',
+      terminationDate: null,
+      jobTitleId: seniorEngineerTitle.id,
+      departmentId: engineeringDept.id,
+      locationId: lagoLocation.id,
+      salary: 3000000,
+    },
+    create: {
       tenantId: tenant.id,
       employeeId: 'LMN-0002',
       firstName: 'Chioma',
@@ -190,8 +221,18 @@ async function main(): Promise<void> {
     },
   });
 
-  const seniorEngineer2 = await prisma.employee.create({
-    data: {
+  const seniorEngineer2 = await prisma.employee.upsert({
+    where: { tenantId_email: { tenantId: tenant.id, email: 'tunde.okafor@lumiontech.com' } },
+    update: {
+      managerId: ctoEmployee.id,
+      employmentStatus: 'ACTIVE',
+      terminationDate: null,
+      jobTitleId: seniorEngineerTitle.id,
+      departmentId: engineeringDept.id,
+      locationId: lagoLocation.id,
+      salary: 2800000,
+    },
+    create: {
       tenantId: tenant.id,
       employeeId: 'LMN-0003',
       firstName: 'Tunde',
@@ -211,8 +252,17 @@ async function main(): Promise<void> {
     },
   });
 
-  const hrManager = await prisma.employee.create({
-    data: {
+  const hrManager = await prisma.employee.upsert({
+    where: { tenantId_email: { tenantId: tenant.id, email: 'blessing.okafor@lumiontech.com' } },
+    update: {
+      employmentStatus: 'ACTIVE',
+      terminationDate: null,
+      jobTitleId: hrManagerTitle.id,
+      departmentId: hrDept.id,
+      locationId: lagoLocation.id,
+      salary: 2200000,
+    },
+    create: {
       tenantId: tenant.id,
       employeeId: 'LMN-0004',
       firstName: 'Blessing',
@@ -232,8 +282,17 @@ async function main(): Promise<void> {
     },
   });
 
-  const salesManager = await prisma.employee.create({
-    data: {
+  const salesManager = await prisma.employee.upsert({
+    where: { tenantId_email: { tenantId: tenant.id, email: 'amara.ngoako@lumiontech.com' } },
+    update: {
+      employmentStatus: 'ACTIVE',
+      terminationDate: null,
+      jobTitleId: salesManagerTitle.id,
+      departmentId: salesDept.id,
+      locationId: abujLocation.id,
+      salary: 2500000,
+    },
+    create: {
       tenantId: tenant.id,
       employeeId: 'LMN-0005',
       firstName: 'Amara',
@@ -247,6 +306,38 @@ async function main(): Promise<void> {
       departmentId: salesDept.id,
       locationId: abujLocation.id,
       salary: 2500000,
+      currency: 'NGN',
+      salaryFrequency: 'MONTHLY',
+    },
+  });
+
+  const exitedEngineer = await prisma.employee.upsert({
+    where: { tenantId_email: { tenantId: tenant.id, email: 'emeka.eze@lumiontech.com' } },
+    update: {
+      employmentStatus: 'EXITED',
+      terminationDate: toDateOnly('2026-03-15'),
+      managerId: ctoEmployee.id,
+      jobTitleId: seniorEngineerTitle.id,
+      departmentId: engineeringDept.id,
+      locationId: lagoLocation.id,
+      salary: 3000000,
+    },
+    create: {
+      tenantId: tenant.id,
+      employeeId: 'LMN-0042',
+      firstName: 'Emeka',
+      lastName: 'Eze',
+      email: 'emeka.eze@lumiontech.com',
+      phone: '+2348000000042',
+      hireDate: new Date('2019-06-03'),
+      employmentType: 'FULL_TIME',
+      employmentStatus: 'EXITED',
+      terminationDate: toDateOnly('2026-03-15'),
+      jobTitleId: seniorEngineerTitle.id,
+      departmentId: engineeringDept.id,
+      locationId: lagoLocation.id,
+      managerId: ctoEmployee.id,
+      salary: 3000000,
       currency: 'NGN',
       salaryFrequency: 'MONTHLY',
     },
@@ -319,6 +410,81 @@ async function main(): Promise<void> {
       carried: 0,
     },
   });
+
+  const seededEmployees = [
+    ctoEmployee,
+    seniorEngineer1,
+    seniorEngineer2,
+    hrManager,
+    salesManager,
+    exitedEngineer,
+  ];
+
+  for (const employee of seededEmployees) {
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "EmploymentHistory" (
+          "id", "tenantId", "employeeId", "stintNumber", "hireDate", "exitDate", "exitType", "jobTitle", "department", "finalSalary", "notes", "createdAt"
+        )
+        SELECT $1, $2, $3, 1, $4::date, $5::date, $6, $7, $8, $9, $10, now()
+        WHERE NOT EXISTS (
+          SELECT 1 FROM "EmploymentHistory"
+          WHERE "employeeId" = $3 AND "stintNumber" = 1
+        )`,
+      `eh_${employee.id.slice(0, 16)}`,
+      tenant.id,
+      employee.id,
+      employee.hireDate.toISOString().slice(0, 10),
+      employee.terminationDate ? employee.terminationDate.toISOString().slice(0, 10) : null,
+      employee.terminationDate ? 'RESIGNATION' : null,
+      employee.id === hrManager.id ? 'HR Manager' : employee.id === salesManager.id ? 'Sales Manager' : 'Senior Engineer',
+      employee.id === hrManager.id ? 'Human Resources' : employee.id === salesManager.id ? 'Sales' : 'Engineering',
+      Number(employee.salary),
+      employee.terminationDate ? 'Exited profile seeded for registry flow' : 'Active employment seeded'
+    );
+  }
+
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO "EmployeeExit" (
+        "id", "tenantId", "employeeId", "exitType", "exitStatus", "noticeDate", "lastWorkingDay", "exitReason", "isEligibleRehire", "rehireNotes", "finalSettlementPaid", "finalSettlementDate", "finalSettlementAmount", "processedByUserId", "createdAt", "updatedAt"
+      )
+      SELECT $1, $2, $3, 'RESIGNATION', 'EXITED', '2026-02-28'::date, '2026-03-15'::date, 'Relocation', true, 'Strong prior performance', true, '2026-03-18'::date, 295568, $4, now(), now()
+      WHERE NOT EXISTS (
+        SELECT 1 FROM "EmployeeExit" WHERE "employeeId" = $3
+      )`,
+    `exit_${exitedEngineer.id.slice(0, 16)}`,
+    tenant.id,
+    exitedEngineer.id,
+    adminUser.id
+  );
+
+  const offboardingTasks = [
+    ['IT', 'Revoke system access', '2026-03-15'],
+    ['IT', 'Collect company laptop', '2026-03-15'],
+    ['HR', 'Conduct exit interview', '2026-03-12'],
+    ['FINANCE', 'Process final payroll', '2026-03-22'],
+    ['MANAGER', 'Collect project handover notes', '2026-03-10'],
+  ];
+
+  for (const [assigneeRole, title, dueDate] of offboardingTasks) {
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "OffboardingTask" (
+          "id", "tenantId", "employeeId", "assigneeRole", "title", "dueDate", "status", "createdAt", "updatedAt"
+        )
+        SELECT $1, $2, $3, $4, $5, $6::date, 'PENDING', now(), now()
+        WHERE NOT EXISTS (
+          SELECT 1 FROM "OffboardingTask"
+          WHERE "employeeId" = $3 AND "title" = $5
+        )`,
+      `ot_${exitedEngineer.id.slice(0, 8)}_${title.replace(/\s+/g, '_').toLowerCase()}`.slice(0, 32),
+      tenant.id,
+      exitedEngineer.id,
+      assigneeRole,
+      title,
+      dueDate
+    );
+  }
+
+  console.log('Seeded exits, employment history, and offboarding tasks');
 
   console.log('Seed completed successfully!');
 }

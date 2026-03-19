@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Button,
   Card,
@@ -15,13 +15,16 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
   Input,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
   useToast,
 } from '@lumion/ui';
 import { Plus } from 'lucide-react';
@@ -40,7 +43,7 @@ interface EmployeeRow {
   avatar?: string | null;
   department: string;
   role: string;
-  status: 'Active' | 'On Leave' | 'Probation';
+  status: 'Active' | 'On Leave' | 'On Notice' | 'Probation';
   manager: string;
   location: 'Lagos' | 'Abuja' | 'Remote';
 }
@@ -64,16 +67,21 @@ function mapStatus(value: string | null | undefined): EmployeeRow['status'] {
   if (!value) return 'Probation';
   if (value === 'ACTIVE') return 'Active';
   if (value === 'ON_LEAVE') return 'On Leave';
+  if (value === 'NOTICE_PERIOD') return 'On Notice';
   return 'Probation';
 }
 
 export default function EmployeesPage(): JSX.Element {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
   const { user } = useCurrentUser();
   const [departmentFilter, setDepartmentFilter] = useState<string>('all');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<string>(
+    searchParams.get('status') === 'NOTICE_PERIOD' ? 'On Notice' : 'all'
+  );
   const [locationFilter, setLocationFilter] = useState<string>('all');
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
 
   const { data, isLoading } = useQuery({
@@ -166,37 +174,41 @@ export default function EmployeesPage(): JSX.Element {
               Export CSV
             </a>
 
-            <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
-              Import CSV
-            </Button>
-
-            <Dialog>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="mr-2 h-4 w-4" />
-                Add Employee
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Add Employee</DialogTitle>
-                <DialogDescription>Create an employee shell and complete profile details later.</DialogDescription>
-              </DialogHeader>
-              <div className="space-y-3">
-                <Input placeholder="First Name" />
-                <Input placeholder="Last Name" />
-                <Input placeholder="Work Email" />
-              </div>
-              <DialogFooter>
-                <Button
-                  onClick={() => {
-                    toast({ title: 'Employee created', description: 'Employee shell has been added to onboarding queue.' });
-                  }}
-                >
-                  Save
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Employee
                 </Button>
-              </DialogFooter>
-            </DialogContent>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={() => setAddDialogOpen(true)}>Add employee manually</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setImportDialogOpen(true)}>Import employees (CSV)</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Add Employee</DialogTitle>
+                  <DialogDescription>Create an employee shell and complete profile details later.</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-3">
+                  <Input placeholder="First Name" />
+                  <Input placeholder="Last Name" />
+                  <Input placeholder="Work Email" />
+                </div>
+                <DialogFooter>
+                  <Button
+                    onClick={() => {
+                      toast({ title: 'Employee created', description: 'Employee shell has been added to onboarding queue.' });
+                      setAddDialogOpen(false);
+                    }}
+                  >
+                    Save
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
             </Dialog>
           </div>
         }
@@ -234,6 +246,7 @@ export default function EmployeesPage(): JSX.Element {
               <SelectItem value="all">All Statuses</SelectItem>
               <SelectItem value="Active">Active</SelectItem>
               <SelectItem value="On Leave">On Leave</SelectItem>
+              <SelectItem value="On Notice">On Notice</SelectItem>
               <SelectItem value="Probation">Probation</SelectItem>
             </SelectContent>
           </Select>

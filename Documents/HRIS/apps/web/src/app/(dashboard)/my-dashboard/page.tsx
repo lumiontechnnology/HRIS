@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Button } from '@lumion/ui';
 import { useCurrentUser } from '@/lib/client-auth';
 import { fetchDashboardApi } from '@/lib/dashboard-api';
+import { ClockWidget } from '@/components/attendance/clock-widget';
 
 interface MeDashboardResponse {
   data: {
@@ -54,6 +55,8 @@ export default function MyDashboardPage(): JSX.Element {
         <h1 className="font-display text-4xl font-normal tracking-tight text-foreground">Good morning, {firstName}.</h1>
         <p className="mt-2 text-sm text-muted-foreground">{todayLabel}</p>
       </div>
+
+      <ClockWidget />
 
       <div className="grid gap-4 md:grid-cols-3">
         <Card>

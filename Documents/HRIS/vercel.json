@@ -7,6 +7,14 @@
     {
       "path": "/api/cron/leave-accrual",
       "schedule": "0 0 1 * *"
+    },
+    {
+      "path": "/api/cron/mark-absences",
+      "schedule": "59 23 * * *"
+    },
+    {
+      "path": "/api/cron/process-exits",
+      "schedule": "59 23 * * *"
     }
   ]
 }

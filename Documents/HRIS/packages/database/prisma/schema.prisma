@@ -63,6 +63,10 @@ model Tenant {
   notifications         Notification[]
   notificationTemplates NotificationTemplate[]
   customFields          CustomField[]
+  workSchedules         WorkSchedule[]
+  employeeExits         EmployeeExit[]
+  employmentHistories   EmploymentHistory[]
+  offboardingTasks      OffboardingTask[]
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -193,7 +197,7 @@ model Employee {
   probationEndDate  DateTime?
   terminationDate   DateTime?
   employmentType    String   // FULL_TIME, PART_TIME, CONTRACT, TEMPORARY, PROBATION
-  employmentStatus  String   @default("ACTIVE") // ACTIVE, ON_LEAVE, SUSPENDED, TERMINATED, RESIGNED
+  employmentStatus  String   @default("ACTIVE") // ACTIVE, NOTICE_PERIOD, EXITED, ON_LEAVE, SUSPENDED, TERMINATED, RESIGNED, REHIRED
   
   // Organization
   jobTitleId        String
@@ -227,6 +231,9 @@ model Employee {
   leaveBalances     LeaveBalance[]
   leaveRequests     LeaveRequest[]
   attendances       Attendance[]
+  exitRecords       EmployeeExit[]
+  employmentHistory EmploymentHistory[]
+  offboardingTasks  OffboardingTask[]
   payslips          Payslip[]
   assetAssignments  AssetAssignment[]
   trainings         TrainingEnrollment[]
@@ -515,7 +522,11 @@ model Attendance {
   date          DateTime @db.Date
   clockIn       DateTime?
   clockOut      DateTime?
+  clockInIp     String?
+  clockOutIp    String?
   duration      Int?     // minutes
+  workedHours   Decimal? @db.Decimal(5, 2)
+  overtimeHours Decimal  @default(0) @db.Decimal(5, 2)
   status        String   // PRESENT, ABSENT, LATE, EARLY_DEPARTURE, ON_LEAVE
   notes         String?
   
@@ -529,6 +540,96 @@ model Attendance {
   @@index([tenantId])
   @@index([employeeId])
   @@index([date])
+  @@index([status])
+}
+
+model WorkSchedule {
+  id            String   @id @default(cuid())
+  tenantId      String
+  workDays      String[] @default(["MON", "TUE", "WED", "THU", "FRI"])
+  workStart     String   @default("08:00")
+  workEnd       String   @default("17:00")
+  graceMinutes  Int      @default(15)
+  overtimeAfter Decimal  @default(8) @db.Decimal(4, 2)
+
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId])
+  @@index([tenantId])
+}
+
+model EmployeeExit {
+  id                    String   @id @default(cuid())
+  tenantId              String
+  employeeId            String
+  exitType              String
+  exitStatus            String   @default("NOTICE_PERIOD")
+  noticeDate            DateTime @db.Date
+  lastWorkingDay        DateTime @db.Date
+  exitReason            String?
+  exitInterviewNotes    String?
+  isEligibleRehire      Boolean  @default(true)
+  rehireNotes           String?
+  finalSettlementPaid   Boolean  @default(false)
+  finalSettlementDate   DateTime? @db.Date
+  finalSettlementAmount Decimal? @db.Decimal(15, 2)
+  processedByUserId     String?
+
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee        Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId, exitStatus])
+  @@index([employeeId])
+  @@index([isEligibleRehire])
+}
+
+model EmploymentHistory {
+  id          String   @id @default(cuid())
+  tenantId    String
+  employeeId  String
+  stintNumber Int      @default(1)
+  hireDate    DateTime @db.Date
+  exitDate    DateTime? @db.Date
+  exitType    String?
+  jobTitle    String?
+  department  String?
+  finalSalary Decimal? @db.Decimal(15, 2)
+  notes       String?
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee  Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([employeeId, stintNumber])
+}
+
+model OffboardingTask {
+  id             String   @id @default(cuid())
+  tenantId       String
+  employeeId     String
+  exitRecordId   String?
+  assigneeRole   String
+  title          String
+  dueDate        DateTime @db.Date
+  status         String   @default("PENDING")
+  completedBy    String?
+  completedAt    DateTime?
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee  Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId, status])
+  @@index([employeeId])
 }
 
 // ============================================================================

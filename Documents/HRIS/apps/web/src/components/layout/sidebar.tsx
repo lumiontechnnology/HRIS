@@ -65,8 +65,11 @@ function navigationForRole(role: string) {
       label: 'Workspace',
       items: [
         { href: '/', label: 'Dashboard' },
-        { href: '/employees', label: 'Employees' },
+        { href: '/employees', label: 'All Employees' },
+        { href: '/employees/exited', label: 'Exited Staff' },
+        { href: '/employees?status=NOTICE_PERIOD', label: 'On Notice Period' },
         { href: '/org-chart', label: 'Org Chart' },
+        { href: '/employees/import-export', label: 'Import / Export' },
         { href: '/onboarding', label: 'Onboarding' },
       ],
     },
