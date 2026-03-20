@@ -93,13 +93,14 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSubmit, errorMessage }) => {
                     </p>
                 ) : null}
             </form>
-            <div className="mt-6 pt-5 border-t border-border/60 dark:border-white/10 text-center">
-                <p className="text-sm text-foreground/80 dark:text-white/70">
-                    Setting up your company?{' '}
-                    <a href="/register" className="font-medium underline text-foreground dark:text-white hover:opacity-80 transition-opacity">
-                        Create your workspace
-                    </a>
+            <div className="mt-6 pt-5 border-t border-border dark:border-white/15 text-center space-y-3">
+                <p className="text-sm" style={{ color: '#333' }}>
+                    Setting up your company?
                 </p>
+                <a href="/register"
+                    className="inline-block w-full py-2.5 rounded-md border-2 border-foreground dark:border-white text-sm font-medium text-center text-foreground dark:text-white hover:bg-foreground hover:text-background dark:hover:bg-white dark:hover:text-black transition-colors">
+                    Create your workspace &rarr;
+                </a>
             </div>
             <p className="mt-4 text-center text-xs text-muted-foreground dark:text-white/40">
                 Lumion Technology · Privacy Policy · Terms
