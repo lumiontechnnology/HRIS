@@ -87,22 +87,24 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSubmit, errorMessage }) => {
                     className="w-full py-2.5 rounded-md bg-foreground text-background dark:bg-white dark:text-black text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50">
                     {isSubmitting ? 'Signing in...' : 'Sign in'}
                 </button>
-                <p className="mt-4 text-center text-xs text-muted-foreground dark:text-white/40">
-                    Setting up your company?{' '}
-                    <a href="/register" className="underline text-foreground hover:text-foreground/80 dark:text-white/70 dark:hover:text-white">
-                        Create your workspace
-                    </a>
-                </p>
                 {errorMessage ? (
                     <p className="text-sm text-destructive" role="alert">
                         {errorMessage}
                     </p>
                 ) : null}
             </form>
-            <p className="mt-6 text-center text-xs text-muted-foreground dark:text-white/40">
+            <div className="mt-6 pt-5 border-t border-border/60 dark:border-white/10 text-center">
+                <p className="text-sm text-foreground/80 dark:text-white/70">
+                    Setting up your company?{' '}
+                    <a href="/register" className="font-medium underline text-foreground dark:text-white hover:opacity-80 transition-opacity">
+                        Create your workspace
+                    </a>
+                </p>
+            </div>
+            <p className="mt-4 text-center text-xs text-muted-foreground dark:text-white/40">
                 Lumion Technology · Privacy Policy · Terms
             </p>
-            <p className="mt-6 text-center text-xs text-muted-foreground dark:text-white/40">
+            <p className="mt-2 text-center text-xs text-muted-foreground dark:text-white/40">
                 Contact your HR administrator to get access.
             </p>
         </div>
