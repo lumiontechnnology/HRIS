@@ -260,6 +260,7 @@ export async function POST(req: NextRequest) {
     }
 
     console.error('register-tenant error', error);
-    return NextResponse.json({ success: false, error: { message: 'Unable to create workspace' } }, { status: 500 });
+    const debugMsg = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ success: false, error: { message: debugMsg } }, { status: 500 });
   }
 }
