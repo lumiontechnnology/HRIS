@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
     const createdAuthUser = await adminClient.auth.admin.createUser({
       email,
       password: payload.password,
-      email_confirm: false,
+      email_confirm: true,
       user_metadata: {
         full_name: payload.fullName,
         firstName: name.firstName,
