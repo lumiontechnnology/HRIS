@@ -87,9 +87,9 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSubmit, errorMessage }) => {
                     className="w-full py-2.5 rounded-md bg-foreground text-background dark:bg-white dark:text-black text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50">
                     {isSubmitting ? 'Signing in...' : 'Sign in'}
                 </button>
-                <p className="text-center text-xs text-white/40 mt-4">
+                <p className="mt-4 text-center text-xs text-muted-foreground dark:text-white/40">
                     Setting up your company?{' '}
-                    <a href="/register" className="text-white/60 hover:text-white underline">
+                    <a href="/register" className="underline text-foreground hover:text-foreground/80 dark:text-white/70 dark:hover:text-white">
                         Create your workspace
                     </a>
                 </p>
