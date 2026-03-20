@@ -87,7 +87,10 @@ export async function POST(req: NextRequest) {
     const name = splitName(payload.fullName);
 
     const adminClient = createAdminClient();
-    const createdAuthUser = await adminClient.auth.admin.createUser({
+
+    // Handle orphaned auth users from previous failed registration attempts
+    let authUserId: string;
+    const createResult = await adminClient.auth.admin.createUser({
       email,
       password: payload.password,
       email_confirm: true,
@@ -98,11 +101,47 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    if (createdAuthUser.error || !createdAuthUser.data.user?.id) {
+    if (createResult.error) {
+      // If user already exists in Supabase auth but not in our DB, reclaim it
+      if (createResult.error.message?.includes('already been registered')) {
+        const { data: listData } = await adminClient.auth.admin.listUsers();
+        const orphan = listData?.users?.find((u) => u.email === email);
+        if (!orphan) {
+          return NextResponse.json(
+            { success: false, error: { message: 'Email is already registered. Please sign in instead.' } },
+            { status: 409 }
+          );
+        }
+        // Update the orphaned auth user with fresh password and metadata
+        const { error: updateErr } = await adminClient.auth.admin.updateUserById(orphan.id, {
+          password: payload.password,
+          email_confirm: true,
+          user_metadata: {
+            full_name: payload.fullName,
+            firstName: name.firstName,
+            lastName: name.lastName,
+          },
+        });
+        if (updateErr) {
+          return NextResponse.json(
+            { success: false, error: { message: updateErr.message || 'Failed to reclaim account' } },
+            { status: 400 }
+          );
+        }
+        authUserId = orphan.id;
+      } else {
+        return NextResponse.json(
+          { success: false, error: { message: createResult.error.message || 'Failed to create account' } },
+          { status: 400 }
+        );
+      }
+    } else if (!createResult.data.user?.id) {
       return NextResponse.json(
-        { success: false, error: { message: createdAuthUser.error?.message || 'Failed to create account' } },
+        { success: false, error: { message: 'Failed to create account' } },
         { status: 400 }
       );
+    } else {
+      authUserId = createResult.data.user.id;
     }
 
     const tenant = await prisma.tenant.create({
@@ -169,7 +208,7 @@ export async function POST(req: NextRequest) {
 
     const appUser = await prisma.user.create({
       data: {
-        authUserId: createdAuthUser.data.user.id,
+        authUserId: authUserId,
         email,
         firstName: name.firstName,
         lastName: name.lastName,
@@ -260,7 +299,6 @@ export async function POST(req: NextRequest) {
     }
 
     console.error('register-tenant error', error);
-    const debugMsg = error instanceof Error ? error.message : String(error);
-    return NextResponse.json({ success: false, error: { message: debugMsg } }, { status: 500 });
+    return NextResponse.json({ success: false, error: { message: 'Unable to create workspace' } }, { status: 500 });
   }
 }
