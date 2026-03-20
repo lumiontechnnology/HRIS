@@ -60,6 +60,7 @@ export const createMeRoutes = (): Hono<Env> => {
       success: true,
       data: {
         id: user.id,
+        tenantId: user.tenantId,
         email: user.email,
         firstName: user.firstName,
         lastName: user.lastName,

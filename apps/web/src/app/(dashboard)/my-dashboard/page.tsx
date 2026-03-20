@@ -35,7 +35,7 @@ export default function MyDashboardPage(): JSX.Element {
     year: 'numeric',
   }).format(new Date());
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ['me-dashboard', user?.id, user?.tenantId],
     enabled: !!user?.id && !!user?.tenantId,
     queryFn: () => fetchDashboardApi<MeDashboardResponse>('/api/v1/me/dashboard', user ? { id: user.id, tenantId: user.tenantId } : undefined),
@@ -45,8 +45,16 @@ export default function MyDashboardPage(): JSX.Element {
   const firstName = useMemo(() => (dashboard?.profile.name || user?.firstName || 'there').split(' ')[0], [dashboard?.profile.name, user?.firstName]);
   const progress = dashboard?.tasks.total ? Math.round((dashboard.tasks.completed / dashboard.tasks.total) * 100) : 0;
 
-  if (isLoading || !dashboard) {
+  if (!user?.id || !user?.tenantId) {
     return <div className="text-sm text-muted-foreground">Loading your workspace...</div>;
+  }
+
+  if (isLoading) {
+    return <div className="text-sm text-muted-foreground">Loading your workspace...</div>;
+  }
+
+  if (isError || !dashboard) {
+    return <div className="text-sm text-muted-foreground">We could not load your workspace data yet. Please refresh.</div>;
   }
 
   return (

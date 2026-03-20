@@ -218,12 +218,14 @@ export function useRole() {
 export function useCurrentUser() {
   const { user, isLoading } = useSupabaseAuthState();
   const [resolvedRole, setResolvedRole] = useState<string | null>(null);
+  const [resolvedTenantId, setResolvedTenantId] = useState<string | null>(null);
   const [isRoleResolved, setIsRoleResolved] = useState(false);
 
-  const tenantId =
+  const metadataTenantId =
     (user?.user_metadata?.tenantId as string | undefined) ||
     (user?.app_metadata?.tenantId as string | undefined) ||
     '';
+  const tenantId = metadataTenantId || resolvedTenantId || '';
 
   const rawRoles = [
     ...toStringArray(user?.app_metadata?.roles),
@@ -239,33 +241,33 @@ export function useCurrentUser() {
 
     if (!user) {
       setResolvedRole(null);
+      setResolvedTenantId(null);
       setIsRoleResolved(false);
       return;
     }
 
     const fallbackRole = roles[0] || 'EMPLOYEE';
 
-    if (!tenantId) {
-      setResolvedRole(fallbackRole);
-      setIsRoleResolved(true);
-      return;
-    }
-
     const hydrateRole = async () => {
       try {
-        const response = await fetchDashboardApi<{ success: boolean; data?: { role?: string } }>(
+        const response = await fetchDashboardApi<{ success: boolean; data?: { role?: string; tenantId?: string } }>(
           '/api/v1/me/profile',
-          { id: user.id, tenantId }
+          { id: user.id, tenantId: metadataTenantId }
         );
 
         const apiRole = response.data?.role?.trim().toUpperCase();
+        const apiTenantId = response.data?.tenantId?.trim();
         if (!cancelled) {
           setResolvedRole(apiRole || fallbackRole);
+          if (apiTenantId) {
+            setResolvedTenantId(apiTenantId);
+          }
           setIsRoleResolved(true);
         }
       } catch {
         if (!cancelled) {
           setResolvedRole(fallbackRole);
+          setResolvedTenantId(metadataTenantId || null);
           setIsRoleResolved(true);
         }
       }
@@ -276,7 +278,7 @@ export function useCurrentUser() {
     return () => {
       cancelled = true;
     };
-  }, [roleKey, tenantId, user?.id]);
+  }, [roleKey, metadataTenantId, user?.id]);
 
   const role = resolvedRole || roles[0] || 'EMPLOYEE';
 
