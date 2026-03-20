@@ -41,21 +41,6 @@ interface MonthlyPayrollTrendResponse {
   period?: string;
 }
 
-const fallbackAttendance: TrendPoint[] = [
-  { day: 'Mon', value: 94 },
-  { day: 'Tue', value: 91 },
-  { day: 'Wed', value: 95 },
-  { day: 'Thu', value: 92 },
-  { day: 'Fri', value: 96 },
-];
-
-const fallbackPayroll: TrendPoint[] = [
-  { day: 'W1', value: 10800000 },
-  { day: 'W2', value: 12300000 },
-  { day: 'W3', value: 11700000 },
-  { day: 'W4', value: 13100000 },
-];
-
 function formatMoney(value: number): string {
   return new Intl.NumberFormat('en-NG', {
     style: 'currency',
@@ -84,7 +69,7 @@ export default function DashboardPage(): JSX.Element {
     queryFn: async (): Promise<WeeklyAttendanceResponse> => {
       const response = await fetch('/api/attendance/weekly-summary', { cache: 'no-store' });
       if (!response.ok) {
-        return { data: fallbackAttendance, trend: 2, period: 'Week' };
+        return { data: [], trend: 0, period: 'Week' };
       }
       return (await response.json()) as WeeklyAttendanceResponse;
     },
@@ -95,7 +80,7 @@ export default function DashboardPage(): JSX.Element {
     queryFn: async (): Promise<MonthlyPayrollTrendResponse> => {
       const response = await fetch('/api/payroll/monthly-trend', { cache: 'no-store' });
       if (!response.ok) {
-        return { data: fallbackPayroll, trend: -3, period: 'Month' };
+        return { data: [], trend: 0, period: 'Month' };
       }
       return (await response.json()) as MonthlyPayrollTrendResponse;
     },
@@ -152,20 +137,20 @@ export default function DashboardPage(): JSX.Element {
       <div className="grid gap-4 xl:grid-cols-3">
         <ActivityChartCard
           title="Attendance"
-          totalValue={`${attendanceTrend?.data?.length ? Math.round(attendanceTrend.data.reduce((acc, item) => acc + item.value, 0) / attendanceTrend.data.length) : 94}%`}
-          trend={attendanceTrend?.trend ?? 2}
+          totalValue={`${attendanceTrend?.data?.length ? Math.round(attendanceTrend.data.reduce((acc, item) => acc + item.value, 0) / attendanceTrend.data.length) : 0}%`}
+          trend={attendanceTrend?.trend ?? 0}
           period={attendanceTrend?.period ?? 'Week'}
-          data={attendanceTrend?.data?.length ? attendanceTrend.data : fallbackAttendance}
+          data={attendanceTrend?.data ?? []}
           dropdownOptions={['This Week', 'This Month', 'This Quarter']}
           className="w-full max-w-none"
         />
 
         <ActivityChartCard
           title="Payroll Cost"
-          totalValue={formatMoney(payrollTrend?.data?.reduce((acc, item) => acc + item.value, 0) ?? 48200000)}
-          trend={payrollTrend?.trend ?? -3}
+          totalValue={formatMoney(payrollTrend?.data?.reduce((acc, item) => acc + item.value, 0) ?? 0)}
+          trend={payrollTrend?.trend ?? 0}
           period={payrollTrend?.period ?? 'Month'}
-          data={payrollTrend?.data?.length ? payrollTrend.data : fallbackPayroll}
+          data={payrollTrend?.data ?? []}
           dropdownOptions={['This Month', 'This Quarter', 'This Year']}
           className="w-full max-w-none"
         />

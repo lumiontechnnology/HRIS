@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { fetchDashboardApi } from '@/lib/dashboard-api';
 import type { SupabaseClient, User } from '@supabase/supabase-js';
 
 interface CurrentUser {
@@ -216,6 +217,8 @@ export function useRole() {
 
 export function useCurrentUser() {
   const { user, isLoading } = useSupabaseAuthState();
+  const [resolvedRole, setResolvedRole] = useState<string | null>(null);
+  const [isRoleResolved, setIsRoleResolved] = useState(false);
 
   const tenantId =
     (user?.user_metadata?.tenantId as string | undefined) ||
@@ -229,7 +232,53 @@ export function useCurrentUser() {
     ...(typeof user?.user_metadata?.role === 'string' ? [user.user_metadata.role] : []),
   ];
   const roles = Array.from(new Set(rawRoles.map((role) => role.trim().toUpperCase())));
-  const role = roles[0] || 'EMPLOYEE';
+  const roleKey = roles.join('|');
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!user) {
+      setResolvedRole(null);
+      setIsRoleResolved(false);
+      return;
+    }
+
+    const fallbackRole = roles[0] || 'EMPLOYEE';
+    setResolvedRole(fallbackRole);
+
+    if (!tenantId) {
+      setIsRoleResolved(true);
+      return;
+    }
+
+    const hydrateRole = async () => {
+      try {
+        const response = await fetchDashboardApi<{ success: boolean; data?: { role?: string } }>(
+          '/api/v1/me/profile',
+          { id: user.id, tenantId }
+        );
+
+        const apiRole = response.data?.role?.trim().toUpperCase();
+        if (!cancelled) {
+          setResolvedRole(apiRole || fallbackRole);
+          setIsRoleResolved(true);
+        }
+      } catch {
+        if (!cancelled) {
+          setResolvedRole(fallbackRole);
+          setIsRoleResolved(true);
+        }
+      }
+    };
+
+    void hydrateRole();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [roleKey, tenantId, user?.id]);
+
+  const role = resolvedRole || roles[0] || 'EMPLOYEE';
 
   return {
     user: user
@@ -246,5 +295,6 @@ export function useCurrentUser() {
       : null,
     isLoading,
     isAuthenticated: !!user,
+    isRoleResolved,
   };
 }

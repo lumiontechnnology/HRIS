@@ -1,19 +1,11 @@
 import { PrismaClient } from '@lumion/database';
-import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { getAuthedUserWithTenant } from '@/lib/auth/tenant';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 const prisma = new PrismaClient();
-
-const seed = [
-  { day: 'Mon', value: 94 },
-  { day: 'Tue', value: 91 },
-  { day: 'Wed', value: 95 },
-  { day: 'Thu', value: 92 },
-  { day: 'Fri', value: 96 },
-];
 
 function startOfWeek(date: Date): Date {
   const copy = new Date(date);
@@ -24,24 +16,11 @@ function startOfWeek(date: Date): Date {
   return copy;
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user: authUser },
-    } = await supabase.auth.getUser();
-
-    if (!authUser?.email) {
-      return NextResponse.json({ data: seed, trend: 2, period: 'Week' });
-    }
-
-    const user = await prisma.user.findUnique({
-      where: { email: authUser.email },
-      select: { tenantId: true },
-    });
-
-    if (!user?.tenantId) {
-      return NextResponse.json({ data: seed, trend: 2, period: 'Week' });
+    const actor = await getAuthedUserWithTenant(request);
+    if (!actor) {
+      return NextResponse.json({ data: [], trend: 0, period: 'Week' });
     }
 
     const weekStart = startOfWeek(new Date());
@@ -51,7 +30,7 @@ export async function GET() {
 
     const attendance = await prisma.attendance.findMany({
       where: {
-        tenantId: user.tenantId,
+        tenantId: actor.tenantId,
         date: {
           gte: weekStart,
           lte: weekEnd,
@@ -65,7 +44,7 @@ export async function GET() {
     });
 
     if (!attendance.length) {
-      return NextResponse.json({ data: seed, trend: 2, period: 'Week' });
+      return NextResponse.json({ data: [], trend: 0, period: 'Week' });
     }
 
     const labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -91,6 +70,6 @@ export async function GET() {
     return NextResponse.json({ data, trend, period: 'Week' });
   } catch (error) {
     console.error('weekly-summary error', error);
-    return NextResponse.json({ data: seed, trend: 2, period: 'Week' });
+    return NextResponse.json({ data: [], trend: 0, period: 'Week' });
   }
 }

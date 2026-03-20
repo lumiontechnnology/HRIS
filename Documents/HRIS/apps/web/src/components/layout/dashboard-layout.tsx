@@ -15,12 +15,12 @@ export function DashboardLayout({
   children,
 }: DashboardLayoutProps): JSX.Element {
   const { isLoading } = useRequireAuth();
-  const { user } = useCurrentUser();
+  const { user, isRoleResolved } = useCurrentUser();
   const pathname = usePathname();
   const router = useRouter();
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !isRoleResolved) return;
 
     if (pathname === '/' && user.role === 'EMPLOYEE') {
       router.replace('/my-dashboard');
@@ -30,7 +30,7 @@ export function DashboardLayout({
     if (pathname === '/' && user.role === 'MANAGER') {
       router.replace('/manager-dashboard');
     }
-  }, [pathname, router, user]);
+  }, [isRoleResolved, pathname, router, user]);
 
   if (isLoading) {
     return (

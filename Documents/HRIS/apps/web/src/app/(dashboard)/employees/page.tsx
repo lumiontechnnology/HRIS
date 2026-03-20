@@ -21,14 +21,10 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
   useToast,
 } from '@lumion/ui';
 import { Plus } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DataTable, type ColumnDef } from '@/components/system/data-table';
 import { Badge, CardSkeleton, SectionHeader } from '@/components/system/primitives';
 import { TeamSwiper } from '@/components/employees/team-swiper';
@@ -63,6 +59,15 @@ interface EmployeesApiResponse {
   }>;
 }
 
+interface EmployeeShellMetadataResponse {
+  data: {
+    departments: Array<{ id: string; name: string }>;
+    jobTitles: Array<{ id: string; title: string }>;
+    managers: Array<{ id: string; firstName: string; lastName: string; email: string }>;
+    employmentTypes: string[];
+  };
+}
+
 function mapStatus(value: string | null | undefined): EmployeeRow['status'] {
   if (!value) return 'Probation';
   if (value === 'ACTIVE') return 'Active';
@@ -75,6 +80,7 @@ export default function EmployeesPage(): JSX.Element {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const { user } = useCurrentUser();
   const [departmentFilter, setDepartmentFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>(
@@ -83,6 +89,16 @@ export default function EmployeesPage(): JSX.Element {
   const [locationFilter, setLocationFilter] = useState<string>('all');
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [shellForm, setShellForm] = useState({
+    firstName: '',
+    lastName: '',
+    email: '',
+    departmentId: '',
+    jobTitleId: '',
+    hireDate: new Date().toISOString().slice(0, 10),
+    employmentType: 'FULL_TIME',
+    managerId: '',
+  });
 
   const { data, isLoading } = useQuery({
     queryKey: ['ui-employees', user?.id, user?.tenantId],
@@ -112,6 +128,48 @@ export default function EmployeesPage(): JSX.Element {
       });
 
       return mapped;
+    },
+  });
+
+  const { data: shellMetadata } = useQuery({
+    queryKey: ['employee-shell-metadata', user?.id, user?.tenantId],
+    enabled: !!user?.tenantId,
+    queryFn: async () => {
+      const response = await fetchDashboardApi<EmployeeShellMetadataResponse>(
+        '/api/v1/employees/metadata/shell',
+        user ? { id: user.id, tenantId: user.tenantId } : undefined
+      );
+      return response.data;
+    },
+  });
+
+  const createShellMutation = useMutation({
+    mutationFn: async () => {
+      const payload = {
+        ...shellForm,
+        email: shellForm.email.trim().toLowerCase(),
+      };
+      return fetchDashboardApi<{ data: { id: string } }>(
+        '/api/v1/employees/shell',
+        user ? { id: user.id, tenantId: user.tenantId } : undefined,
+        {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        }
+      );
+    },
+    onSuccess: (response) => {
+      toast({ title: 'Employee shell created', description: 'Opening employee profile for completion.' });
+      setAddDialogOpen(false);
+      queryClient.invalidateQueries({ queryKey: ['ui-employees'] });
+      router.push(`/employees/${response.data.id}`);
+    },
+    onError: (error: unknown) => {
+      toast({
+        title: 'Create failed',
+        description: error instanceof Error ? error.message : 'Unable to create employee shell',
+        variant: 'destructive',
+      });
     },
   });
 
@@ -165,6 +223,10 @@ export default function EmployeesPage(): JSX.Element {
         description="Search and manage workforce records with operational filters."
         actions={
           <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
+              Import CSV
+            </Button>
+
             <a
               href={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/v1/employees/export?format=csv`}
               target="_blank"
@@ -174,38 +236,123 @@ export default function EmployeesPage(): JSX.Element {
               Export CSV
             </a>
 
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add Employee
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onSelect={() => setAddDialogOpen(true)}>Add employee manually</DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => setImportDialogOpen(true)}>Import employees (CSV)</DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <Button onClick={() => setAddDialogOpen(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              Add Employee
+            </Button>
 
             <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
               <DialogContent>
                 <DialogHeader>
                   <DialogTitle>Add Employee</DialogTitle>
-                  <DialogDescription>Create an employee shell and complete profile details later.</DialogDescription>
+                  <DialogDescription>
+                    Create a functional employee shell, then complete profile details on the employee page.
+                  </DialogDescription>
                 </DialogHeader>
-                <div className="space-y-3">
-                  <Input placeholder="First Name" />
-                  <Input placeholder="Last Name" />
-                  <Input placeholder="Work Email" />
+
+                <div className="space-y-4">
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <Input
+                      placeholder="First Name"
+                      value={shellForm.firstName}
+                      onChange={(event) => setShellForm((prev) => ({ ...prev, firstName: event.target.value }))}
+                    />
+                    <Input
+                      placeholder="Last Name"
+                      value={shellForm.lastName}
+                      onChange={(event) => setShellForm((prev) => ({ ...prev, lastName: event.target.value }))}
+                    />
+                  </div>
+
+                  <Input
+                    placeholder="Work Email"
+                    value={shellForm.email}
+                    onChange={(event) => setShellForm((prev) => ({ ...prev, email: event.target.value }))}
+                  />
+
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <select
+                      className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                      value={shellForm.departmentId}
+                      onChange={(event) => setShellForm((prev) => ({ ...prev, departmentId: event.target.value }))}
+                    >
+                      <option value="">Department</option>
+                      {(shellMetadata?.departments || []).map((department) => (
+                        <option key={department.id} value={department.id}>
+                          {department.name}
+                        </option>
+                      ))}
+                    </select>
+
+                    <select
+                      className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                      value={shellForm.jobTitleId}
+                      onChange={(event) => setShellForm((prev) => ({ ...prev, jobTitleId: event.target.value }))}
+                    >
+                      <option value="">Job Title</option>
+                      {(shellMetadata?.jobTitles || []).map((jobTitle) => (
+                        <option key={jobTitle.id} value={jobTitle.id}>
+                          {jobTitle.title}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <Input
+                      type="date"
+                      value={shellForm.hireDate}
+                      onChange={(event) => setShellForm((prev) => ({ ...prev, hireDate: event.target.value }))}
+                    />
+
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <select
+                        className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                        value={shellForm.employmentType}
+                        onChange={(event) => setShellForm((prev) => ({ ...prev, employmentType: event.target.value }))}
+                      >
+                        {(shellMetadata?.employmentTypes || ['FULL_TIME', 'PART_TIME', 'CONTRACT', 'INTERN']).map((type) => (
+                          <option key={type} value={type}>
+                            {type}
+                          </option>
+                        ))}
+                      </select>
+
+                      <select
+                        className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                        value={shellForm.managerId}
+                        onChange={(event) => setShellForm((prev) => ({ ...prev, managerId: event.target.value }))}
+                      >
+                        <option value="">Manager</option>
+                        {(shellMetadata?.managers || []).map((manager) => (
+                          <option key={manager.id} value={manager.id}>
+                            {`${manager.firstName} ${manager.lastName}`.trim()}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
                 </div>
+
                 <DialogFooter>
+                  <Button variant="outline" onClick={() => setAddDialogOpen(false)}>
+                    Cancel
+                  </Button>
                   <Button
-                    onClick={() => {
-                      toast({ title: 'Employee created', description: 'Employee shell has been added to onboarding queue.' });
-                      setAddDialogOpen(false);
-                    }}
+                    onClick={() => createShellMutation.mutate()}
+                    disabled={
+                      createShellMutation.isPending ||
+                      !shellForm.firstName ||
+                      !shellForm.lastName ||
+                      !shellForm.email ||
+                      !shellForm.departmentId ||
+                      !shellForm.jobTitleId ||
+                      !shellForm.hireDate ||
+                      !shellForm.employmentType ||
+                      !shellForm.managerId
+                    }
                   >
-                    Save
+                    {createShellMutation.isPending ? 'Saving...' : 'Save & Continue'}
                   </Button>
                 </DialogFooter>
               </DialogContent>

@@ -268,6 +268,44 @@ export default function PayrollRunDetailPage(): JSX.Element {
     }
   };
 
+  const downloadReport = async (
+    report: 'paye-schedule' | 'pension-schedule' | 'payroll-summary',
+    format: 'csv' | 'excel' | 'pdf'
+  ) => {
+    try {
+      const response = await fetch(
+        `http://localhost:3001/api/v1/payroll/reports/${report}?runId=${id}&format=${format}`,
+        {
+          headers: {
+            'x-user-id': user?.id || '',
+            'x-tenant-id': user?.tenantId || '',
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Report download failed');
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const extension = format === 'excel' ? 'xls' : format === 'pdf' ? 'html' : 'csv';
+      link.href = url;
+      link.download = `${report}-${id}.${extension}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Unable to download report',
+        variant: 'destructive',
+      });
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex justify-center py-12">
@@ -326,11 +364,67 @@ export default function PayrollRunDetailPage(): JSX.Element {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <Link href={`/payroll/runs/${id}/components`}>
+            <Button variant="outline">Variable Components</Button>
+          </Link>
           <span className={`inline-block rounded-full px-4 py-2 font-semibold ${statusColors[run.status]}`}>
             {run.status}
           </span>
         </div>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Run Reports</CardTitle>
+          <CardDescription>Download PAYE, pension, and component summary schedules.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 md:grid-cols-3">
+          <div className="space-y-2">
+            <div className="text-xs uppercase tracking-[0.08em] text-slate-500 dark:text-slate-400">PAYE Schedule</div>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={() => downloadReport('paye-schedule', 'csv')}>
+                <Download className="mr-1 h-3.5 w-3.5" /> CSV
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => downloadReport('paye-schedule', 'excel')}>
+                <Download className="mr-1 h-3.5 w-3.5" /> Excel
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => downloadReport('paye-schedule', 'pdf')}>
+                <Download className="mr-1 h-3.5 w-3.5" /> PDF
+              </Button>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="text-xs uppercase tracking-[0.08em] text-slate-500 dark:text-slate-400">Pension Schedule</div>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={() => downloadReport('pension-schedule', 'csv')}>
+                <Download className="mr-1 h-3.5 w-3.5" /> CSV
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => downloadReport('pension-schedule', 'excel')}>
+                <Download className="mr-1 h-3.5 w-3.5" /> Excel
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => downloadReport('pension-schedule', 'pdf')}>
+                <Download className="mr-1 h-3.5 w-3.5" /> PDF
+              </Button>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="text-xs uppercase tracking-[0.08em] text-slate-500 dark:text-slate-400">Payroll Summary</div>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={() => downloadReport('payroll-summary', 'csv')}>
+                <Download className="mr-1 h-3.5 w-3.5" /> CSV
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => downloadReport('payroll-summary', 'excel')}>
+                <Download className="mr-1 h-3.5 w-3.5" /> Excel
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => downloadReport('payroll-summary', 'pdf')}>
+                <Download className="mr-1 h-3.5 w-3.5" /> PDF
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Payroll Overview Cards */}
       <div className="grid gap-4 md:grid-cols-3">

@@ -1,35 +1,22 @@
 import { PrismaClient } from '@lumion/database';
-import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { getAuthedUserWithTenant } from '@/lib/auth/tenant';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 const prisma = new PrismaClient();
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user: authUser },
-    } = await supabase.auth.getUser();
-
-    if (!authUser?.email) {
-      return NextResponse.json({ data: [] });
-    }
-
-    const user = await prisma.user.findUnique({
-      where: { email: authUser.email },
-      select: { tenantId: true },
-    });
-
-    if (!user?.tenantId) {
+    const actor = await getAuthedUserWithTenant(request);
+    if (!actor) {
       return NextResponse.json({ data: [] });
     }
 
     const hires = await prisma.employee.findMany({
       where: {
-        tenantId: user.tenantId,
+        tenantId: actor.tenantId,
         employmentStatus: 'ACTIVE',
       },
       orderBy: [{ hireDate: 'desc' }, { createdAt: 'desc' }],

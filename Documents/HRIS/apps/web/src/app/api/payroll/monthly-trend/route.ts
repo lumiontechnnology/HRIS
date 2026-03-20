@@ -1,18 +1,11 @@
 import { PrismaClient } from '@lumion/database';
-import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { getAuthedUserWithTenant } from '@/lib/auth/tenant';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 const prisma = new PrismaClient();
-
-const seed = [
-  { day: 'W1', value: 10800000 },
-  { day: 'W2', value: 12300000 },
-  { day: 'W3', value: 11700000 },
-  { day: 'W4', value: 13100000 },
-];
 
 function toNumber(value: unknown): number {
   if (typeof value === 'number') return value;
@@ -23,24 +16,11 @@ function toNumber(value: unknown): number {
   return 0;
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user: authUser },
-    } = await supabase.auth.getUser();
-
-    if (!authUser?.email) {
-      return NextResponse.json({ data: seed, trend: -3, period: 'Month' });
-    }
-
-    const user = await prisma.user.findUnique({
-      where: { email: authUser.email },
-      select: { tenantId: true },
-    });
-
-    if (!user?.tenantId) {
-      return NextResponse.json({ data: seed, trend: -3, period: 'Month' });
+    const actor = await getAuthedUserWithTenant(request);
+    if (!actor) {
+      return NextResponse.json({ data: [], trend: 0, period: 'Month' });
     }
 
     const now = new Date();
@@ -48,7 +28,7 @@ export async function GET() {
 
     const payrollRuns = await prisma.payrollRun.findMany({
       where: {
-        tenantId: user.tenantId,
+        tenantId: actor.tenantId,
         period,
       },
       include: {
@@ -62,7 +42,7 @@ export async function GET() {
     });
 
     if (!payrollRuns.length) {
-      return NextResponse.json({ data: seed, trend: -3, period: 'Month' });
+      return NextResponse.json({ data: [], trend: 0, period: 'Month' });
     }
 
     const weekBuckets = [0, 0, 0, 0];
@@ -82,6 +62,6 @@ export async function GET() {
     return NextResponse.json({ data, trend, period: 'Month' });
   } catch (error) {
     console.error('monthly-trend error', error);
-    return NextResponse.json({ data: seed, trend: -3, period: 'Month' });
+    return NextResponse.json({ data: [], trend: 0, period: 'Month' });
   }
 }

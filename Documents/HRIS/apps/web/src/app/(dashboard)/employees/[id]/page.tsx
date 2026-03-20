@@ -253,7 +253,12 @@ export default function EmployeeProfilePage(): JSX.Element {
                   <CardHeader>
                     <CardTitle className="text-base">Payroll Snapshot</CardTitle>
                   </CardHeader>
-                  <CardContent className="text-sm text-slate-700">Base salary, allowances, deductions, tax history, and payslip access.</CardContent>
+                  <CardContent className="space-y-3 text-sm text-slate-700">
+                    <p>Base salary, allowances, deductions, tax history, and payslip access.</p>
+                    <Button variant="outline" asChild>
+                      <a href={`/employees/${data.id}/compensation`}>Manage compensation components</a>
+                    </Button>
+                  </CardContent>
                 </Card>
               </TabsContent>
 

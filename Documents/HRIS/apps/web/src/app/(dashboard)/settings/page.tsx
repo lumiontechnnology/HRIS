@@ -49,6 +49,21 @@ export default function SettingsPage(): JSX.Element {
             </Button>
           </CardContent>
         </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Payroll Components</CardTitle>
+            <CardDescription>Configure taxable and pensionable earnings rules</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Control allowances, bonus behavior, pension base, and NHF applicability from one place.
+            </p>
+            <Button variant="outline" asChild>
+              <a href="/settings/payroll-components">Open payroll components</a>
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

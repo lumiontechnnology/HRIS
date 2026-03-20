@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import Link from 'next/link';
 import { Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@lumion/ui';
 import { useCurrentUser } from '@/lib/client-auth';
 
@@ -144,7 +145,7 @@ export function CsvImportDialog({ open, onOpenChange, onImported }: CsvImportPro
           </div>
 
           <div className="rounded-md border border-border p-4">
-            <p className="mb-3 text-sm text-foreground">2. Upload CSV and validate</p>
+            <p className="mb-3 text-sm text-foreground">2. Upload and validate all rows</p>
             <input
               type="file"
               accept=".csv,text/csv"
@@ -181,7 +182,7 @@ export function CsvImportDialog({ open, onOpenChange, onImported }: CsvImportPro
 
           {validationErrors.length > 0 && (
             <div className="rounded-md border border-border p-4">
-              <p className="mb-3 text-sm font-medium text-foreground">Validation errors</p>
+              <p className="mb-3 text-sm font-medium text-foreground">3. Errors found</p>
               <div className="max-h-56 overflow-auto">
                 <table className="w-full text-xs">
                   <thead>
@@ -203,13 +204,22 @@ export function CsvImportDialog({ open, onOpenChange, onImported }: CsvImportPro
                 </table>
               </div>
 
-              <Button onClick={downloadErrors} variant="outline" className="mt-3">Download Error Report</Button>
+              <div className="mt-3 flex items-center gap-2">
+                <Button onClick={downloadErrors} variant="outline">Download Error Report</Button>
+                <Button variant="outline" onClick={() => setValidationErrors([])}>Try Again</Button>
+              </div>
             </div>
           )}
 
           {result?.success && (
             <div className="rounded-md border border-border p-4 text-sm text-foreground">
-              {result.created || 0} employees imported successfully.
+              <p className="font-medium">3. Success</p>
+              <p className="mt-1">{result.created || 0} employees imported successfully.</p>
+              <div className="mt-3">
+                <Link href="/employees" className="text-sm underline underline-offset-4">
+                  View Employees
+                </Link>
+              </div>
             </div>
           )}
 
@@ -221,7 +231,7 @@ export function CsvImportDialog({ open, onOpenChange, onImported }: CsvImportPro
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
           <Button onClick={startImport} disabled={!file || isUploading}>
-            {isUploading ? 'Validating rows...' : 'Validate and import'}
+            {isUploading ? 'Validating rows...' : 'Validate and Import'}
           </Button>
         </DialogFooter>
       </DialogContent>
