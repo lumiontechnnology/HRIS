@@ -52,7 +52,7 @@ export const createMeRoutes = (): Hono<Env> => {
       },
     });
 
-    if (!user || !user.employee) {
+    if (!user) {
       return c.json({ success: false, error: { code: 'NOT_FOUND', message: 'Profile not found' } }, 404);
     }
 
@@ -64,7 +64,7 @@ export const createMeRoutes = (): Hono<Env> => {
         firstName: user.firstName,
         lastName: user.lastName,
         role: user.roles[0]?.name || 'EMPLOYEE',
-        employee: user.employee,
+        employee: user.employee ?? null,
       },
     });
   });

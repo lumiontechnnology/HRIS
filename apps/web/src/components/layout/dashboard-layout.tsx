@@ -6,6 +6,7 @@ import { Header } from './header';
 import { useCurrentUser, useRequireAuth } from '@/lib/client-auth';
 import { Toaster } from '@lumion/ui';
 import { usePathname, useRouter } from 'next/navigation';
+import { useQuery } from '@tanstack/react-query';
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -19,6 +20,18 @@ export function DashboardLayout({
   const pathname = usePathname();
   const router = useRouter();
 
+  const { data: onboardingState } = useQuery({
+    queryKey: ['onboarding-check', user?.tenantId],
+    enabled: !!user && isRoleResolved && (user.role === 'SUPER_ADMIN' || user.role === 'HR_ADMIN'),
+    queryFn: async () => {
+      const res = await fetch('/api/auth/onboarding/state', { cache: 'no-store' });
+      if (!res.ok) return null;
+      const payload = await res.json();
+      return payload?.data ?? null;
+    },
+    staleTime: 60_000,
+  });
+
   useEffect(() => {
     if (!user || !isRoleResolved) return;
 
@@ -29,15 +42,26 @@ export function DashboardLayout({
 
     if (pathname === '/' && user.role === 'MANAGER') {
       router.replace('/manager-dashboard');
+      return;
     }
-  }, [isRoleResolved, pathname, router, user]);
 
-  if (isLoading) {
+    // Redirect SUPER_ADMIN to onboarding if not complete
+    if (
+      user.role === 'SUPER_ADMIN' &&
+      onboardingState &&
+      !onboardingState.tenant?.onboardingComplete &&
+      pathname !== '/onboarding'
+    ) {
+      router.replace('/onboarding');
+    }
+  }, [isRoleResolved, pathname, router, user, onboardingState]);
+
+  if (isLoading || !isRoleResolved) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="text-center">
-          <div className="inline-block h-12 w-12 animate-spin rounded-full border-4 border-slate-300 border-t-indigo-600" />
-          <p className="mt-4 text-slate-600">Loading...</p>
+          <div className="inline-block h-12 w-12 animate-spin rounded-full border-4 border-muted border-t-foreground" />
+          <p className="mt-4 text-sm text-muted-foreground">Loading...</p>
         </div>
       </div>
     );

@@ -93,7 +93,7 @@ function navigationForRole(role: string) {
 export function Sidebar(): JSX.Element {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const { user } = useCurrentUser();
+  const { user, isRoleResolved } = useCurrentUser();
   const supabase = createClient();
   const navigation = useMemo(() => navigationForRole(user?.role || 'EMPLOYEE'), [user?.role]);
 

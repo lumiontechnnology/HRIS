@@ -244,9 +244,9 @@ export function useCurrentUser() {
     }
 
     const fallbackRole = roles[0] || 'EMPLOYEE';
-    setResolvedRole(fallbackRole);
 
     if (!tenantId) {
+      setResolvedRole(fallbackRole);
       setIsRoleResolved(true);
       return;
     }

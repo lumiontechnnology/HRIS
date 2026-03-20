@@ -137,10 +137,30 @@ export function CsvImportDialog({ open, onOpenChange, onImported }: CsvImportPro
         <div className="space-y-4">
           <div className="rounded-md border border-border p-4">
             <p className="text-sm text-foreground">1. Download the template file</p>
-            <Button asChild variant="outline" className="mt-3">
-              <a href={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/v1/employees/template`} target="_blank" rel="noreferrer">
-                Download Template CSV
-              </a>
+            <Button
+              variant="outline"
+              className="mt-3"
+              onClick={async () => {
+                if (!user?.id || !user?.tenantId) return;
+                try {
+                  const res = await fetch(
+                    `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/v1/employees/template`,
+                    { headers: { 'x-user-id': user.id, 'x-tenant-id': user.tenantId } }
+                  );
+                  if (!res.ok) throw new Error('Download failed');
+                  const blob = await res.blob();
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = 'lumion-employees-template.csv';
+                  a.click();
+                  URL.revokeObjectURL(url);
+                } catch {
+                  // silently fail – user can retry
+                }
+              }}
+            >
+              Download Template CSV
             </Button>
           </div>
 
