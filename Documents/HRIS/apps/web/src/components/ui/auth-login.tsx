@@ -93,10 +93,19 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSubmit, errorMessage }) => {
                     </p>
                 ) : null}
             </form>
-            <p className="mt-6 text-center text-xs text-muted-foreground dark:text-white/40">
+            <div className="mt-6 pt-5 border-t border-border dark:border-white/15 text-center space-y-3">
+                <p className="text-sm text-foreground dark:text-white">
+                    Setting up your company?
+                </p>
+                <a href="/register"
+                    className="inline-block w-full py-2.5 rounded-md border-2 border-foreground dark:border-white text-sm font-medium text-center text-foreground dark:text-white hover:bg-foreground hover:text-background dark:hover:bg-white dark:hover:text-black transition-colors">
+                    Create your workspace →
+                </a>
+            </div>
+            <p className="mt-4 text-center text-xs text-muted-foreground dark:text-white/40">
                 Lumion Technology · Privacy Policy · Terms
             </p>
-            <p className="mt-6 text-center text-xs text-muted-foreground dark:text-white/40">
+            <p className="mt-2 text-center text-xs text-muted-foreground dark:text-white/40">
                 Contact your HR administrator to get access.
             </p>
         </div>
