@@ -36,7 +36,7 @@ export default function LeaveApprovalsPage(): JSX.Element {
     queryKey: ['leave-requests-pending'],
     queryFn: async () => {
       const res = await fetch(
-        'http://localhost:3001/api/v1/leave-requests?status=SUBMITTED',
+        '/api/proxy/leave-requests?status=SUBMITTED',
         {
           headers: {
             'x-user-id': user?.id || '',
@@ -58,7 +58,7 @@ export default function LeaveApprovalsPage(): JSX.Element {
     setApproving(requestId);
     try {
       const res = await fetch(
-        `http://localhost:3001/api/v1/leave-requests/${requestId}/approve`,
+        `/api/proxy/leave-requests/${requestId}/approve`,
         {
           method: 'PATCH',
           headers: {
@@ -98,7 +98,7 @@ export default function LeaveApprovalsPage(): JSX.Element {
     setApproving(requestId);
     try {
       const res = await fetch(
-        `http://localhost:3001/api/v1/leave-requests/${requestId}/approve`,
+        `/api/proxy/leave-requests/${requestId}/approve`,
         {
           method: 'PATCH',
           headers: {

@@ -45,7 +45,7 @@ export default function PayrollRunsPage(): JSX.Element {
         params.append('status', status);
       }
 
-      const res = await fetch(`http://localhost:3001/api/v1/payroll/runs?${params}`, {
+      const res = await fetch(`/api/proxy/payroll/runs?${params}`, {
         headers: {
           'x-user-id': user?.id || '',
           'x-tenant-id': user?.tenantId || '',

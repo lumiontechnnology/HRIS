@@ -50,7 +50,7 @@ export default function ApplicationsPage(): JSX.Element {
       }
 
       const res = await fetch(
-        `http://localhost:3001/api/v1/recruitment/applications?${params}`,
+        `/api/proxy/recruitment/applications?${params}`,
         {
           headers: {
             'x-user-id': user?.id || '',

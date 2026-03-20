@@ -54,7 +54,7 @@ export default function NewPayrollRunPage(): JSX.Element {
         description: data.description,
       };
 
-      const res = await fetch('http://localhost:3001/api/v1/payroll/runs', {
+      const res = await fetch('/api/proxy/payroll/runs', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

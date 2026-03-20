@@ -48,7 +48,7 @@ export default function LeaveDetailPage(): JSX.Element {
   const { data, isLoading, error } = useQuery({
     queryKey: ['leave-request', id],
     queryFn: async () => {
-      const res = await fetch(`http://localhost:3001/api/v1/leave-requests/${id}`, {
+      const res = await fetch(`/api/proxy/leave-requests/${id}`, {
         headers: {
           'x-user-id': user?.id || '',
           'x-tenant-id': user?.tenantId || '',

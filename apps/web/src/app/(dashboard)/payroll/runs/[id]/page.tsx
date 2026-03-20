@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { useParams, useRouter } from 'next/navigation';
 import { useCurrentUser } from '@/lib/client-auth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Button, useToast } from '@lumion/ui';
@@ -97,7 +97,7 @@ export default function PayrollRunDetailPage(): JSX.Element {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['payroll-run', id],
     queryFn: async () => {
-      const res = await fetch(`http://localhost:3001/api/v1/payroll/runs/${id}`, {
+      const res = await fetch(`/api/proxy/payroll/runs/${id}`, {
         headers: {
           'x-user-id': user?.id || '',
           'x-tenant-id': user?.tenantId || '',
@@ -116,7 +116,7 @@ export default function PayrollRunDetailPage(): JSX.Element {
   const { data: approvalChain, refetch: refetchApprovalChain } = useQuery({
     queryKey: ['payroll-approvals', id],
     queryFn: async () => {
-      const res = await fetch(`http://localhost:3001/api/v1/payroll/runs/${id}/approvals`, {
+      const res = await fetch(`/api/proxy/payroll/runs/${id}/approvals`, {
         headers: {
           'x-user-id': user?.id || '',
           'x-tenant-id': user?.tenantId || '',
@@ -135,7 +135,7 @@ export default function PayrollRunDetailPage(): JSX.Element {
   const generatePayslips = async () => {
     setGeneratingPayslips(true);
     try {
-      const res = await fetch(`http://localhost:3001/api/v1/payroll/runs/${id}/generate-payslips`, {
+      const res = await fetch(`/api/proxy/payroll/runs/${id}/generate-payslips`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -169,7 +169,7 @@ export default function PayrollRunDetailPage(): JSX.Element {
   const approveRun = async () => {
     setApprovingRun(true);
     try {
-      const res = await fetch(`http://localhost:3001/api/v1/payroll/runs/${id}/approve`, {
+      const res = await fetch(`/api/proxy/payroll/runs/${id}/approve`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -205,7 +205,7 @@ export default function PayrollRunDetailPage(): JSX.Element {
   const submitRunForApproval = async () => {
     setSubmittingRun(true);
     try {
-      const res = await fetch(`http://localhost:3001/api/v1/payroll/runs/${id}/submit`, {
+      const res = await fetch(`/api/proxy/payroll/runs/${id}/submit`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -239,7 +239,7 @@ export default function PayrollRunDetailPage(): JSX.Element {
 
     setRejectingRun(true);
     try {
-      const res = await fetch(`http://localhost:3001/api/v1/payroll/runs/${id}/reject`, {
+      const res = await fetch(`/api/proxy/payroll/runs/${id}/reject`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -274,7 +274,7 @@ export default function PayrollRunDetailPage(): JSX.Element {
   ) => {
     try {
       const response = await fetch(
-        `http://localhost:3001/api/v1/payroll/reports/${report}?runId=${id}&format=${format}`,
+        `/api/proxy/payroll/reports/${report}?runId=${id}&format=${format}`,
         {
           headers: {
             'x-user-id': user?.id || '',

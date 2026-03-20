@@ -59,7 +59,7 @@ export default function NewJobPage(): JSX.Element {
         closingDate: new Date(data.closingDate).toISOString(),
       };
 
-      const res = await fetch('http://localhost:3001/api/v1/recruitment/jobs', {
+      const res = await fetch('/api/proxy/recruitment/jobs', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

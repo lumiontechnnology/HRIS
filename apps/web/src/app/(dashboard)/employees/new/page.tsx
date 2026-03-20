@@ -42,7 +42,7 @@ export default function NewEmployeePage(): JSX.Element {
   const onSubmit = async (data: EmployeeCreateInput) => {
     setLoading(true);
     try {
-      const res = await fetch('http://localhost:3001/api/v1/employees', {
+      const res = await fetch('/api/proxy/employees', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

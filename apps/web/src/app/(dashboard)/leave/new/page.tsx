@@ -59,7 +59,7 @@ export default function NewLeaveRequestPage(): JSX.Element {
   const { data: leaveTypesData } = useQuery({
     queryKey: ['leave-types'],
     queryFn: async () => {
-      const res = await fetch('http://localhost:3001/api/v1/leave-requests/types/list', {
+      const res = await fetch('/api/proxy/leave-requests/types/list', {
         headers: {
           'x-user-id': user?.id || '',
           'x-tenant-id': user?.tenantId || '',
@@ -82,7 +82,7 @@ export default function NewLeaveRequestPage(): JSX.Element {
       if (!selectedEmployeeId || !selectedLeaveTypeId) return null;
 
       const res = await fetch(
-        `http://localhost:3001/api/v1/leave-requests/employee/${selectedEmployeeId}/balance`,
+        `/api/proxy/leave-requests/employee/${selectedEmployeeId}/balance`,
         {
           headers: {
             'x-user-id': user?.id || '',
@@ -122,7 +122,7 @@ export default function NewLeaveRequestPage(): JSX.Element {
   const onSubmit = async (data: LeaveRequestCreateInput) => {
     setLoading(true);
     try {
-      const res = await fetch('http://localhost:3001/api/v1/leave-requests', {
+      const res = await fetch('/api/proxy/leave-requests', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

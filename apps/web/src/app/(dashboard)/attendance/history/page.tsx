@@ -33,7 +33,7 @@ export default function AttendanceHistoryPage(): JSX.Element {
   const { data: employeeData } = useQuery({
     queryKey: ['current-employee'],
     queryFn: async () => {
-      const res = await fetch(`http://localhost:3001/api/v1/employees?limit=1`, {
+      const res = await fetch(`/api/proxy/employees?limit=1`, {
         headers: {
           'x-user-id': user?.id || '',
           'x-tenant-id': user?.tenantId || '',
@@ -57,7 +57,7 @@ export default function AttendanceHistoryPage(): JSX.Element {
       if (!employeeData?.id) return null;
 
       const res = await fetch(
-        `http://localhost:3001/api/v1/attendance/employee/${employeeData.id}?month=${month}&page=${page}&limit=20`,
+        `/api/proxy/attendance/employee/${employeeData.id}?month=${month}&page=${page}&limit=20`,
         {
           headers: {
             'x-user-id': user?.id || '',

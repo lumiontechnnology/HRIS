@@ -3,27 +3,28 @@ export interface DashboardUserContext {
   tenantId: string;
 }
 
-function getApiBaseUrl(): string {
-  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-}
-
+/**
+ * Fetches data from the Hono API via the server-side Next.js proxy.
+ *
+ * Auth (x-user-id / x-tenant-id) is injected by the proxy using the
+ * server-side Supabase session — it is NOT sent from the browser.
+ * The `user` parameter is accepted for backward compatibility but ignored.
+ *
+ * Paths must start with /api/v1/ (e.g. '/api/v1/attendance/today').
+ */
 export async function fetchDashboardApi<T>(
   path: string,
-  user?: DashboardUserContext,
+  _user?: DashboardUserContext,
   init?: RequestInit
 ): Promise<T> {
+  // Route through the Next.js proxy instead of calling the Hono API directly.
+  // /api/v1/foo/bar → /api/proxy/foo/bar
+  const proxyPath = path.replace(/^\/api\/v1/, '/api/proxy');
+
   const headers = new Headers(init?.headers);
   headers.set('Content-Type', 'application/json');
 
-  if (user?.id) {
-    headers.set('x-user-id', user.id);
-  }
-
-  if (user?.tenantId) {
-    headers.set('x-tenant-id', user.tenantId);
-  }
-
-  const response = await fetch(`${getApiBaseUrl()}${path}`, {
+  const response = await fetch(proxyPath, {
     ...init,
     headers,
   });

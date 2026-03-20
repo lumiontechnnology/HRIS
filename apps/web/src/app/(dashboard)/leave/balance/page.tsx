@@ -24,7 +24,7 @@ export default function LeaveBalancePage(): JSX.Element {
   const { data: employeeData } = useQuery({
     queryKey: ['current-employee'],
     queryFn: async () => {
-      const res = await fetch(`http://localhost:3001/api/v1/employees?limit=1000`, {
+      const res = await fetch(`/api/proxy/employees?limit=1000`, {
         headers: {
           'x-user-id': user?.id || '',
           'x-tenant-id': user?.tenantId || '',
@@ -49,7 +49,7 @@ export default function LeaveBalancePage(): JSX.Element {
       if (!employeeData?.id) return null;
 
       const res = await fetch(
-        `http://localhost:3001/api/v1/leave-requests/employee/${employeeData.id}/balance`,
+        `/api/proxy/leave-requests/employee/${employeeData.id}/balance`,
         {
           headers: {
             'x-user-id': user?.id || '',

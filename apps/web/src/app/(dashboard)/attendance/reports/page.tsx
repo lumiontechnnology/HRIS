@@ -45,7 +45,7 @@ export default function AttendanceReportsPage(): JSX.Element {
     queryKey: ['attendance-report', month],
     queryFn: async () => {
       const res = await fetch(
-        `http://localhost:3001/api/v1/attendance/report/${month}`,
+        `/api/proxy/attendance/report/${month}`,
         {
           headers: {
             'x-user-id': user?.id || '',

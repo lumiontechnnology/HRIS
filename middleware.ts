@@ -54,6 +54,12 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const pathname = request.nextUrl.pathname;
+  
+  // API routes handle their own authentication - don't redirect
+  if (pathname.startsWith('/api/') || pathname.startsWith('/trpc/')) {
+    return supabaseResponse;
+  }
+
   const authPrefixes = ['/sign-in', '/sign-up', '/login', '/register', '/accept-invite'];
   const isAuthPage = authPrefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
   const isProtected = protectedPrefixes.some(

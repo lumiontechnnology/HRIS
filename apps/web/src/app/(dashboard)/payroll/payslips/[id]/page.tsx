@@ -42,7 +42,7 @@ export default function PayslipDetailPage(): JSX.Element {
   const { data, isLoading, error } = useQuery({
     queryKey: ['payslip', id],
     queryFn: async () => {
-      const res = await fetch(`http://localhost:3001/api/v1/payroll/payslips/${id}`, {
+      const res = await fetch(`/api/proxy/payroll/payslips/${id}`, {
         headers: {
           'x-user-id': user?.id || '',
           'x-tenant-id': user?.tenantId || '',
@@ -63,7 +63,7 @@ export default function PayslipDetailPage(): JSX.Element {
   const downloadDocument = async () => {
     if (!user) return;
 
-    await fetch(`http://localhost:3001/api/v1/payroll/payslips/${id}/generate-pdf`, {
+    await fetch(`/api/proxy/payroll/payslips/${id}/generate-pdf`, {
       method: 'POST',
       headers: {
         'x-user-id': user.id,
@@ -71,7 +71,7 @@ export default function PayslipDetailPage(): JSX.Element {
       },
     });
 
-    window.open(`http://localhost:3001/api/v1/payroll/payslips/${id}/pdf`, '_blank');
+    window.open(`/api/proxy/payroll/payslips/${id}/pdf`, '_blank');
   };
 
   const sendPayslip = async () => {
@@ -79,7 +79,7 @@ export default function PayslipDetailPage(): JSX.Element {
 
     setIsSending(true);
     try {
-      await fetch(`http://localhost:3001/api/v1/payroll/payslips/${id}/send`, {
+      await fetch(`/api/proxy/payroll/payslips/${id}/send`, {
         method: 'POST',
         headers: {
           'x-user-id': user.id,

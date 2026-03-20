@@ -33,7 +33,7 @@ export default function PayslipsPage(): JSX.Element {
     queryKey: ['payslips', page],
     queryFn: async () => {
       const res = await fetch(
-        `http://localhost:3001/api/v1/payroll/payslips?page=${page}&limit=20`,
+        `/api/proxy/payroll/payslips?page=${page}&limit=20`,
         {
           headers: {
             'x-user-id': user?.id || '',

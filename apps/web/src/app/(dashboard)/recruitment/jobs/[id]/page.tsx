@@ -64,7 +64,7 @@ export default function JobDetailPage(): JSX.Element {
   const { data, isLoading } = useQuery({
     queryKey: ['job', id],
     queryFn: async () => {
-      const res = await fetch(`http://localhost:3001/api/v1/recruitment/jobs/${id}`, {
+      const res = await fetch(`/api/proxy/recruitment/jobs/${id}`, {
         headers: {
           'x-user-id': user?.id || '',
           'x-tenant-id': user?.tenantId || '',
