@@ -141,12 +141,8 @@ export function CsvImportDialog({ open, onOpenChange, onImported }: CsvImportPro
               variant="outline"
               className="mt-3"
               onClick={async () => {
-                if (!user?.id || !user?.tenantId) return;
                 try {
-                  const res = await fetch(
-                    `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/v1/employees/template`,
-                    { headers: { 'x-user-id': user.id, 'x-tenant-id': user.tenantId } }
-                  );
+                  const res = await fetch('/api/employees/template', { cache: 'no-store' });
                   if (!res.ok) throw new Error('Download failed');
                   const blob = await res.blob();
                   const url = URL.createObjectURL(blob);
