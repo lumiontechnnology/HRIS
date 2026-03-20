@@ -85,12 +85,8 @@ export function CsvImportDialog({ open, onOpenChange, onImported }: CsvImportPro
       const formData = new FormData();
       formData.append('csv', file);
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/v1/employees/import`, {
+      const response = await fetch('/api/employees/import', {
         method: 'POST',
-        headers: {
-          'x-user-id': user.id,
-          'x-tenant-id': user.tenantId,
-        },
         body: formData,
       });
 

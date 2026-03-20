@@ -228,7 +228,7 @@ export default function EmployeesPage(): JSX.Element {
             </Button>
 
             <a
-              href={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/v1/employees/export?format=csv`}
+              href="/api/employees/export"
               target="_blank"
               rel="noreferrer"
               className="rounded-md border border-border px-4 py-2 text-sm text-foreground transition-colors duration-150 hover:bg-muted"
