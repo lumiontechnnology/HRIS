@@ -350,6 +350,7 @@ test('CSV import with all valid rows inserts every record and returns 200', asyn
   const originalLocationFindMany = prismaMock.location?.findMany;
   const originalEmployeeFindMany = prismaMock.employee?.findMany;
   const originalEmployeeCreate = prismaMock.employee?.create;
+  const originalTransaction = prismaMock.$transaction;
 
   prismaMock.department = prismaMock.department || {};
   prismaMock.jobTitle = prismaMock.jobTitle || {};
@@ -361,6 +362,7 @@ test('CSV import with all valid rows inserts every record and returns 200', asyn
   prismaMock.location.findMany = async () => [{ id: 'loc-1', name: 'Lagos' }];
   prismaMock.employee.findMany = async () => [{ id: 'mgr-1', email: 'manager@lumion.com' }];
   prismaMock.employee.count = async () => 10;
+  prismaMock.$transaction = async (callback: (tx: unknown) => Promise<unknown>) => callback(prismaMock);
 
   prismaMock.address = prismaMock.address || {};
   prismaMock.emergencyContact = prismaMock.emergencyContact || {};
@@ -417,6 +419,7 @@ test('CSV import with all valid rows inserts every record and returns 200', asyn
   prismaMock.location.findMany = originalLocationFindMany;
   prismaMock.employee.findMany = originalEmployeeFindMany;
   prismaMock.employee.create = originalEmployeeCreate;
+  prismaMock.$transaction = originalTransaction;
   prismaMock.employee.count = originalEmployeeCount;
   prismaMock.address.create = originalAddressCreate;
   prismaMock.emergencyContact.create = originalEmergencyCreate;

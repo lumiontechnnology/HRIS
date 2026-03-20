@@ -21,6 +21,7 @@ export default function LumionAdminPage(): JSX.Element {
   const [tenants, setTenants] = useState<TenantRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [actionLoadingTenantId, setActionLoadingTenantId] = useState<string | null>(null);
 
   async function loadTenants() {
     setError(null);
@@ -44,6 +45,67 @@ export default function LumionAdminPage(): JSX.Element {
       setTenants([]);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function toggleTenantActive(tenantId: string, nextIsActive: boolean) {
+    setError(null);
+    setActionLoadingTenantId(tenantId);
+
+    try {
+      const response = await fetch('/api/lumion-admin/tenants', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-lumion-master-password': masterPassword,
+        },
+        body: JSON.stringify({ tenantId, isActive: nextIsActive }),
+      });
+
+      const payload = await response.json();
+      if (!response.ok || !payload.success) {
+        throw new Error(payload?.error?.message || 'Failed to update tenant status');
+      }
+
+      setTenants((prev) => prev.map((tenant) => (
+        tenant.id === tenantId ? { ...tenant, isActive: nextIsActive } : tenant
+      )));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to update tenant status');
+    } finally {
+      setActionLoadingTenantId(null);
+    }
+  }
+
+  async function impersonateTenant(tenantId: string) {
+    setError(null);
+    setActionLoadingTenantId(tenantId);
+
+    try {
+      const response = await fetch('/api/lumion-admin/impersonate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-lumion-master-password': masterPassword,
+        },
+        body: JSON.stringify({ tenantId }),
+      });
+
+      const payload = await response.json();
+      if (!response.ok || !payload.success) {
+        throw new Error(payload?.error?.message || 'Failed to generate impersonation link');
+      }
+
+      const actionLink = payload?.data?.actionLink as string | undefined;
+      if (!actionLink) {
+        throw new Error('No impersonation link received');
+      }
+
+      window.open(actionLink, '_blank', 'noopener,noreferrer');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to impersonate tenant');
+    } finally {
+      setActionLoadingTenantId(null);
     }
   }
 
@@ -78,6 +140,7 @@ export default function LumionAdminPage(): JSX.Element {
                 <th className="px-3 py-2">Status</th>
                 <th className="px-3 py-2">Trial Ends</th>
                 <th className="px-3 py-2">Created</th>
+                <th className="px-3 py-2">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -93,6 +156,25 @@ export default function LumionAdminPage(): JSX.Element {
                   <td className="px-3 py-2">{tenant.isActive ? 'Active' : 'Inactive'}</td>
                   <td className="px-3 py-2">{new Date(tenant.trialEndsAt).toLocaleDateString()}</td>
                   <td className="px-3 py-2">{new Date(tenant.createdAt).toLocaleDateString()}</td>
+                  <td className="px-3 py-2">
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={actionLoadingTenantId === tenant.id || !masterPassword}
+                        onClick={() => toggleTenantActive(tenant.id, !tenant.isActive)}
+                      >
+                        {tenant.isActive ? 'Deactivate' : 'Activate'}
+                      </Button>
+                      <Button
+                        size="sm"
+                        disabled={actionLoadingTenantId === tenant.id || !masterPassword}
+                        onClick={() => impersonateTenant(tenant.id)}
+                      >
+                        Impersonate
+                      </Button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>

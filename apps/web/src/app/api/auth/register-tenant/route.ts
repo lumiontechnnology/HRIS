@@ -51,6 +51,10 @@ function splitName(fullName: string): { firstName: string; lastName: string } {
 
 async function sendWelcomeEmail(email: string, companyName: string): Promise<void> {
   if (!process.env.RESEND_API_KEY) {
+    console.warn('Welcome email skipped: RESEND_API_KEY is not configured', {
+      recipient: email,
+      companyName,
+    });
     return;
   }
 

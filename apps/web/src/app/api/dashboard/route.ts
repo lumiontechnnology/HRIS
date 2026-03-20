@@ -1,52 +1,23 @@
 import { PrismaClient } from '@lumion/database';
-import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { getAuthedUserWithTenant } from '@/lib/auth/tenant';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 const prisma = new PrismaClient();
 
-export async function GET(_request: Request) {
+export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user: authUser },
-    } = await supabase.auth.getUser();
+    const actor = await getAuthedUserWithTenant(request);
 
-    if (!authUser) {
+    if (!actor) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-    }
-
-    if (!authUser.email) {
-      return NextResponse.json({ success: false, error: 'Email is required' }, { status: 400 });
-    }
-
-    const user = await prisma.user.findUnique({
-      where: { email: authUser.email },
-      include: { tenant: true },
-    });
-
-    if (!user || !user.tenantId) {
-      return NextResponse.json(
-        { 
-          success: true, 
-          data: {
-            employees: [],
-            stats: {
-              totalHeadcount: 0,
-              activeLeavePending: 0,
-              pendingPayroll: 0,
-              attritionRate: 0,
-            },
-          } 
-        }
-      );
     }
 
     // Fetch employees for tenant
     const employees = await prisma.employee.findMany({
-      where: { tenantId: user.tenantId },
+      where: { tenantId: actor.tenantId },
       select: {
         id: true,
         employeeId: true,
@@ -68,14 +39,14 @@ export async function GET(_request: Request) {
     // Fetch stats
     const totalHeadcount = await prisma.employee.count({
       where: {
-        tenantId: user.tenantId,
+        tenantId: actor.tenantId,
         employmentStatus: 'ACTIVE',
       },
     });
 
     const leaveRequestsPending = await prisma.leaveRequest.count({
       where: {
-        tenantId: user.tenantId,
+        tenantId: actor.tenantId,
         status: { in: ['PENDING', 'APPROVED'] },
       },
     });

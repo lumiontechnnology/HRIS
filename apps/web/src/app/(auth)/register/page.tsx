@@ -93,7 +93,7 @@ export default function RegisterPage(): JSX.Element {
       <Card className="w-full">
         <CardHeader>
           <CardTitle>Create your Lumion workspace</CardTitle>
-          <CardDescription>New companies start here. Employees are invited later by your SUPER_ADMIN.</CardDescription>
+          <CardDescription>This is for new companies. Employees do not self-register and are invited later.</CardDescription>
           <div className="mt-2 flex items-center gap-2">
             {[1, 2, 3].map((dot) => (
               <span key={dot} className={`h-2.5 w-2.5 rounded-full ${dot <= step ? 'bg-foreground' : 'bg-muted'}`} />
@@ -104,31 +104,58 @@ export default function RegisterPage(): JSX.Element {
         <CardContent className="space-y-5">
           {step === 1 ? (
             <div className="space-y-4">
-              <Input placeholder="Company Name" value={form.companyName} onChange={(event) => setForm((prev) => ({ ...prev, companyName: event.target.value }))} />
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Step 1 - Company</p>
+              <label className="space-y-1.5 text-sm">
+                <span>Company name (required)</span>
+                <Input placeholder="Acme Ltd" value={form.companyName} onChange={(event) => setForm((prev) => ({ ...prev, companyName: event.target.value }))} />
+              </label>
+              <label className="space-y-1.5 text-sm">
+                <span>Industry</span>
               <select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={form.industry} onChange={(event) => setForm((prev) => ({ ...prev, industry: event.target.value }))}>
                 {industries.map((item) => <option key={item} value={item}>{item}</option>)}
               </select>
+              </label>
+              <label className="space-y-1.5 text-sm">
+                <span>Company size</span>
               <select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={form.companySize} onChange={(event) => setForm((prev) => ({ ...prev, companySize: event.target.value }))}>
                 {sizes.map((item) => <option key={item} value={item}>{item}</option>)}
               </select>
+              </label>
+              <label className="space-y-1.5 text-sm">
+                <span>Country</span>
               <select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={form.country} onChange={(event) => setForm((prev) => ({ ...prev, country: event.target.value }))}>
                 {countries.map((item) => <option key={item} value={item}>{item}</option>)}
               </select>
+              </label>
             </div>
           ) : null}
 
           {step === 2 ? (
             <div className="space-y-4">
-              <Input placeholder="Full Name" value={form.fullName} onChange={(event) => setForm((prev) => ({ ...prev, fullName: event.target.value }))} />
-              <Input type="email" placeholder="Work Email" value={form.workEmail} onChange={(event) => setForm((prev) => ({ ...prev, workEmail: event.target.value }))} />
-              <Input type="password" placeholder="Password" value={form.password} onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))} />
-              <Input type="password" placeholder="Confirm Password" value={form.confirmPassword} onChange={(event) => setForm((prev) => ({ ...prev, confirmPassword: event.target.value }))} />
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Step 2 - Your account (this person = SUPER_ADMIN)</p>
+              <label className="space-y-1.5 text-sm">
+                <span>Full name (required)</span>
+                <Input placeholder="Jane Doe" value={form.fullName} onChange={(event) => setForm((prev) => ({ ...prev, fullName: event.target.value }))} />
+              </label>
+              <label className="space-y-1.5 text-sm">
+                <span>Work email (required)</span>
+                <Input type="email" placeholder="jane@company.com" value={form.workEmail} onChange={(event) => setForm((prev) => ({ ...prev, workEmail: event.target.value }))} />
+              </label>
+              <label className="space-y-1.5 text-sm">
+                <span>Password</span>
+                <Input type="password" placeholder="Minimum 8 characters" value={form.password} onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))} />
+              </label>
+              <label className="space-y-1.5 text-sm">
+                <span>Confirm password</span>
+                <Input type="password" placeholder="Re-enter password" value={form.confirmPassword} onChange={(event) => setForm((prev) => ({ ...prev, confirmPassword: event.target.value }))} />
+              </label>
               <p className="text-xs text-muted-foreground">Password must be at least 8 characters and include one number.</p>
             </div>
           ) : null}
 
           {step === 3 ? (
             <div className="space-y-4">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Step 3 - Review + Submit</p>
               <div className="rounded-md border border-border p-4 text-sm">
                 <p><strong>Company:</strong> {form.companyName}</p>
                 <p><strong>Industry:</strong> {form.industry}</p>
@@ -138,7 +165,7 @@ export default function RegisterPage(): JSX.Element {
               </div>
               <label className="flex items-start gap-2 text-sm text-foreground">
                 <input type="checkbox" checked={form.agreedToTerms} onChange={(event) => setForm((prev) => ({ ...prev, agreedToTerms: event.target.checked }))} />
-                <span>I agree to the Terms of Service and Privacy Policy.</span>
+                <span>I agree to the Terms of Service and Privacy Policy</span>
               </label>
             </div>
           ) : null}

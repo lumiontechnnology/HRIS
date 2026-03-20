@@ -1,36 +1,22 @@
 import { PrismaClient } from '@lumion/database';
-import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { getAuthedUserWithTenant } from '@/lib/auth/tenant';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 const prisma = new PrismaClient();
 
-export async function GET(_request: Request) {
+export async function GET(request: NextRequest) {
   try {
-    const supabase = createClient();
-    const {
-      data: { user: authUser },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !authUser?.email) {
+    const actor = await getAuthedUserWithTenant(request);
+    if (!actor) {
       return NextResponse.json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Unauthorized' } }, { status: 401 });
-    }
-
-    const user = await prisma.user.findUnique({
-      where: { email: authUser.email },
-      select: { tenantId: true },
-    });
-
-    if (!user?.tenantId) {
-      return NextResponse.json({ success: true, data: [] });
     }
 
     const employees = await prisma.employee.findMany({
       where: {
-        tenantId: user.tenantId,
+        tenantId: actor.tenantId,
         employmentStatus: 'ACTIVE',
       },
       select: {

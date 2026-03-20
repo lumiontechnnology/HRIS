@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@lumion/database';
 
-export async function GET(req: NextRequest) {
+function isAuthorized(req: NextRequest): boolean {
   const providedSecret = req.headers.get('x-lumion-master-password');
   const expectedSecret = process.env.LUMION_MASTER_PASSWORD;
+  return Boolean(expectedSecret && providedSecret === expectedSecret);
+}
 
-  if (!expectedSecret || providedSecret !== expectedSecret) {
+export async function GET(req: NextRequest) {
+  if (!isAuthorized(req)) {
     return NextResponse.json({ success: false, error: { message: 'Unauthorized' } }, { status: 401 });
   }
 
@@ -38,4 +41,25 @@ export async function GET(req: NextRequest) {
       usersCount: tenant._count.users,
     })),
   });
+}
+
+export async function PATCH(req: NextRequest) {
+  if (!isAuthorized(req)) {
+    return NextResponse.json({ success: false, error: { message: 'Unauthorized' } }, { status: 401 });
+  }
+
+  const body = (await req.json()) as { tenantId?: string; isActive?: boolean };
+  const tenantId = body.tenantId?.trim();
+
+  if (!tenantId || typeof body.isActive !== 'boolean') {
+    return NextResponse.json({ success: false, error: { message: 'tenantId and isActive are required' } }, { status: 400 });
+  }
+
+  const tenant = await prisma.tenant.update({
+    where: { id: tenantId },
+    data: { isActive: body.isActive },
+    select: { id: true, isActive: true },
+  });
+
+  return NextResponse.json({ success: true, data: tenant });
 }

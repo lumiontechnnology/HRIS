@@ -1,6 +1,6 @@
 import { PrismaClient } from '@lumion/database';
-import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { getAuthedUserWithTenant } from '@/lib/auth/tenant';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,24 +15,11 @@ function isValidImageUrl(value: string): boolean {
   }
 }
 
-export async function PATCH(request: Request, context: { params: { id: string } }) {
+export async function PATCH(request: NextRequest, context: { params: { id: string } }) {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user: authUser },
-    } = await supabase.auth.getUser();
-
-    if (!authUser?.email) {
+    const actor = await getAuthedUserWithTenant(request);
+    if (!actor) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const user = await prisma.user.findUnique({
-      where: { email: authUser.email },
-      select: { tenantId: true },
-    });
-
-    if (!user?.tenantId) {
-      return NextResponse.json({ success: false, error: 'Tenant not found' }, { status: 404 });
     }
 
     const body = (await request.json()) as { avatar?: string | null };
@@ -45,7 +32,7 @@ export async function PATCH(request: Request, context: { params: { id: string } 
     const employee = await prisma.employee.updateMany({
       where: {
         id: context.params.id,
-        tenantId: user.tenantId,
+        tenantId: actor.tenantId,
       },
       data: {
         avatar,

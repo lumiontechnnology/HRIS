@@ -87,6 +87,12 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSubmit, errorMessage }) => {
                     className="w-full py-2.5 rounded-md bg-foreground text-background dark:bg-white dark:text-black text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50">
                     {isSubmitting ? 'Signing in...' : 'Sign in'}
                 </button>
+                <p className="text-center text-xs text-white/40 mt-4">
+                    Setting up your company?{' '}
+                    <a href="/register" className="text-white/60 hover:text-white underline">
+                        Create your workspace
+                    </a>
+                </p>
                 {errorMessage ? (
                     <p className="text-sm text-destructive" role="alert">
                         {errorMessage}
@@ -95,9 +101,6 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSubmit, errorMessage }) => {
             </form>
             <p className="mt-6 text-center text-xs text-muted-foreground dark:text-white/40">
                 Lumion Technology · Privacy Policy · Terms
-            </p>
-            <p className="mt-2 text-center text-xs text-muted-foreground dark:text-white/40">
-                Don't have an account? <a href="/register" className="underline underline-offset-2">Get started for your company</a>
             </p>
             <p className="mt-6 text-center text-xs text-muted-foreground dark:text-white/40">
                 Contact your HR administrator to get access.
